@@ -1,0 +1,957 @@
+%%%%%%%% Cost-Sensitive Conformal Decision-Making Under Label-Shift Uncertainty %%%%%%%%%
+
+\documentclass{article}
+
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+
+\usepackage[accepted]{icml2026}
+
+\renewcommand{\ttdefault}{cmtt}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{amsthm}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\usepackage[capitalize,noabbrev]{cleveref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% THEOREMS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% NOTATION — consistent conventions:
+%   Capitals (X, Y, R): random variables / expected quantities
+%   Calligraphic (\mathcal{X}): sets / spaces
+%   Greek (\alpha, \lambda, \rho): parameters / thresholds
+%   Lowercase (c, w, n): constants / realised values
+%   Subscripts: class labels (y), distribution (tr/dep)
+%   Superscripts: distribution (tr/dep) on priors
+%   i in {1,...,N}: sample index
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\loss}{\ell}                         % per-sample loss
+\newcommand{\Risk}{R}                            % expected risk
+\newcommand{\Rhat}{\hat{R}}                      % empirical risk
+\newcommand{\lamhat}{\hat{\lambda}}              % selected threshold
+\newcommand{\pii}[2]{\pi_{#1}^{\mathrm{#2}}}    % class prior: \pii{y}{tr}
+\newcommand{\rhostar}{\rho^{*}}                  % true shift ratio
+\newcommand{\rhohat}{\hat{\rho}}                 % assumed shift ratio
+\newcommand{\Bpw}{B_{\mathrm{pw}}}              % prevalence-weighted bound
+\newcommand{\Btv}{B_{\mathrm{tv}}}              % total variation bound
+\newcommand{\asafe}{\alpha_{\mathrm{safe}}}      % adjusted calibration level
+\newcommand{\cfn}{c_{\mathrm{fn}}}               % false negative cost
+\newcommand{\cfp}{c_{\mathrm{fp}}}               % false positive cost
+
+\icmltitlerunning{When Should an LLM Say ``I Don't Know''?}
+
+\begin{document}
+
+\twocolumn[
+  \icmltitle{When Should an LLM Say ``I Don't Know''?:\\
+    Conformal Risk Control for Safety-Critical\\
+    LLM Deployment Under Shift}
+
+  \icmlsetsymbol{equal}{*}
+
+  \begin{icmlauthorlist}
+    \icmlauthor{Baljinnyam Dayan}{ic}
+  \end{icmlauthorlist}
+
+  \icmlaffiliation{ic}{Imperial College London, CID: 06059151}
+  \icmlcorrespondingauthor{Baljinnyam Dayan}{bd1125@ic.ac.uk}
+
+  \icmlkeywords{LLM safety, Hallucination, Abstention, Conformal prediction, Label shift, Risk control, Agentic AI, GAIA benchmark}
+
+  \vskip 0.3in
+]
+
+\printAffiliationsAndNotice{}
+
+% ======================================================================
+\begin{abstract}
+  Large language models are increasingly used in settings where a confident wrong answer is worse than no answer at all: medical assistants, safety filters, and tool-using copilots acting on behalf of users.
+  Recent work argues that hallucinations persist in part because current training and evaluation reward guessing over acknowledging uncertainty.
+  We study the complementary \emph{deployment-time} problem: given a scored LLM output, when should the system answer, retry, or say ``I don't know'' / hand off under distribution shift?
+  We extend Conformal Risk Control (CRC) to cost-sensitive decision-making under uncertain label shift with four contributions:
+  (1)~a prevalence-weighted excess risk bound that is provably tighter than the standard total variation bound (27--39\% improvement);
+  (2)~an \emph{uncertainty-aware recalibration} procedure with a \emph{three-way decision rule} that maintains cost-weighted guarantees over a practitioner-specified or data-driven shift interval, with abstention emerging from endpoint threshold disagreement and a formal conditional risk guarantee on the decided subset;
+  (3)~empirical evaluation on two LLM-facing deployment settings---toxicity moderation (CivilComments, $\cfn/\cfp = 5$) and agentic QA on GAIA---with Folktables as non-LLM support, showing that recalibration eliminates risk violations under moderate shift, while Bayesian three-way decisions convert uncertainty into automatic escalation;
+  (4)~an \emph{agentic deployment layer} on GAIA that extends CRC from classifier scores to LLM-agent badness scores, reducing autonomous risk on a controlled difficulty-shift demo and abstaining safely when the underlying agent lacks sufficient capability on the full benchmark.
+  The resulting perspective is practical rather than magical: we do not solve hallucination at training time, but we provide a principled deployment layer that helps an LLM refuse unsafe answers.
+\end{abstract}
+
+% ======================================================================
+% BEAT 1: Motivation — why risk guarantees matter
+% BEAT 2: Issue — label shift + cost asymmetry + unknown shift = unsolved
+% BEAT 3: Contribution — what we do about it
+% ======================================================================
+\section{Introduction}
+\label{sec:intro}
+
+% --- Beat 1: Motivation ---
+Large language models are increasingly deployed in settings where a confident wrong answer can be dangerous: medical information assistants, safety filters, and tool-using copilots that act on behalf of users.
+Yet modern systems are usually optimized to \emph{produce an answer}, not to know when they should abstain.
+Recent work argues that hallucinations persist in part because training and evaluation reward guessing over acknowledging uncertainty \citep{kalai2025hallucinate}.
+Conformal Risk Control \citep[CRC;][]{angelopoulos2024conformal} offers finite-sample risk guarantees for scored decisions, but assumes exchangeable calibration and deployment data.
+
+% --- Beat 2: Issue and why it remains unsolved ---
+The deployment distribution shifts constantly.
+A toxicity filter calibrated on general comments ($6\%$ toxic) faces identity-targeting discussions ($29\%$ toxic); an LLM assistant calibrated on easy or text-only tasks may face harder tasks, attachments, or agentic workflows at deployment.
+These are settings where the rate of bad outcomes changes, and where the central operational question is not only \emph{what} answer to produce but \emph{whether to answer at all}.
+Under classical label shift, the marginal $P(Y)$ changes while the class-conditional $P(X \mid Y)$ does not; in agentic settings, the closest analogue is a \emph{failure-prevalence shift} in the rate of wrong first-pass answers.
+Prior work addresses label shift through importance weighting \citep{tibshirani2019conformal, podkopaev2021distribution} or PAC prediction sets \citep{fisch2022conformal}, but two practical gaps remain.
+First, existing guarantees target symmetric losses (miscoverage, set size) rather than the \emph{cost-weighted} risk relevant to safety-critical LLM deployment, where a dangerous hallucination can cost much more than an unnecessary abstention.
+Second, importance weighting requires knowing---or accurately estimating---the deployment prevalence.
+When the deployment distribution is uncertain, the practitioner faces a fundamental question: \textbf{when should an LLM answer, when should it retry, and when should it say ``I don't know'' / hand off?}
+
+% --- Beat 3: Our contribution ---
+We address all three gaps.
+We make four contributions:
+\begin{enumerate}
+  \item A \textbf{prevalence-weighted excess risk bound} that exploits cost--prevalence structure to tighten the standard total variation bound, with improvement governed by class imbalance and cost ratio (\cref{sec:bound}; 27--39\% in our settings, formally characterised in \cref{cor:regime}).
+  \item \textbf{Uncertainty-aware recalibration with three-way decisions}: a procedure that computes the tightest calibration level guaranteeing cost-weighted risk control for \emph{all} shift ratios in a practitioner-specified or data-driven interval $[\rho_{\mathrm{lo}}, \rho_{\mathrm{hi}}]$, with a three-way decision rule (``classify / defer / escalate'') whose deferral emerges from endpoint threshold disagreement---no deferral cost hyperparameter---and a formal conditional risk guarantee on the decided subset (\cref{thm:threeway,sec:b4}).
+  \item An \textbf{empirical study} centred on safety-critical LLM deployment: toxicity moderation on CivilComments ($\cfn/\cfp = 5$) and agentic QA on GAIA, with Folktables as non-LLM support.  Across these settings, recalibration improves safety margins under moderate shift, three-way decisions provide automatic escalation, and conservative recalibration can distribute burden unevenly across subgroups (\cref{sec:results}).
+  \item An \textbf{agentic deployment layer} on the GAIA benchmark \citep{mialon2023gaia}, applying CRC to LLM-agent \emph{badness scores} (LLM-as-judge estimates of $P(\text{answer is wrong})$) under task-difficulty shift.  In a controlled difficulty-shift demo, CRC-based gating reduces autonomous risk from $37.5\%$ to $20.0$%; on the full benchmark, it safely abstains when the underlying agent lacks sufficient capability (\cref{sec:gaia_results}).
+\end{enumerate}
+
+% ======================================================================
+\section{Related Work}
+\label{sec:related}
+
+% --- Paragraph 1: Conformal prediction under distribution shift ---
+\textbf{Conformal methods under distribution shift.}
+Several approaches extend conformal guarantees beyond exchangeability.
+\citet{tibshirani2019conformal} introduce weighted conformal prediction for covariate shift using likelihood ratios.
+\citet{podkopaev2021distribution} provide coverage guarantees under label shift via importance-weighted quantiles.
+\citet{barber2023conformal} develop a general framework for conformal prediction beyond exchangeability, covering both covariate and label shift.
+More recently, \citet{angelopoulos2026nonmonotonic} extends conformal risk control to non-monotonic, multi-dimensional losses, and \citet{hultberg2026anytime} provide anytime-valid CRC guarantees over growing calibration sets.
+However, these methods target coverage or general risk functionals, not \emph{cost-weighted} decision risk under uncertain shift magnitude.
+
+% --- Paragraph 2: Label shift estimation ---
+\textbf{Label shift estimation.}
+Detecting and correcting for label shift requires estimating the deployment class distribution.
+\citet{lipton2018detecting} propose Black Box Shift Estimation (BBSE), which uses the classifier's confusion matrix and unlabelled deployment predictions.
+\citet{alexandari2020maximum} improve upon BBSE with maximum-likelihood calibration.
+\citet{saerens2002adjusting} give an EM procedure for adjusting classifier outputs to new priors.
+These methods provide point estimates of the shift, but do not quantify the downstream risk when the estimate is wrong---a gap our bound (\cref{sec:bound}) and recalibration procedure (\cref{sec:b4}) address.
+
+% --- Paragraph 3: PAC prediction sets ---
+\textbf{PAC prediction sets under label shift.}
+\citet{fisch2022conformal} provide PAC-style guarantees for prediction sets under label shift, combining conformal calibration with worst-case bounds over a family of distributions.
+\citet{xu2025selective} propose Selective Conformal Risk Control, integrating conformal prediction with selective classification via a two-stage confidence-then-calibrate pipeline with PAC-style guarantees.
+We extend the \citet{fisch2022conformal} framework from prediction-set coverage to cost-sensitive threshold decisions with uncertainty-aware recalibration.
+
+% --- Paragraph 4: Fairness in conformal prediction ---
+\textbf{Fairness in conformal prediction.}
+Recent work studies equalized coverage across demographic groups \citep{romano2020malice}, and \citet{vadlamani2025conformal} propose a generic framework adapting group fairness notions (demographic parity, equalized odds) to conformal prediction.
+Our subgroup analysis (\cref{sec:results}) complements this line by showing that \emph{aggregate} cost-weighted risk control can mask unequal false-negative burden across groups---a distinct failure mode from unequal coverage.
+
+% --- Paragraph 5: Cost-sensitive conformal methods and deferral ---
+\textbf{Cost-sensitive conformal methods and deferral.}
+Concurrent work addresses cost-sensitivity and deferral within conformal frameworks.
+\citet{jia2026costsensitive} propose cost-sensitive conformal \emph{training} via rank weighting, optimising prediction-set size end-to-end during model training rather than post-hoc calibration.
+Most closely related, \citet{kwon2026conformal} combine conformal prediction with cost-aware deferral for clinical triage under distribution shift, using importance weighting for shift robustness and a cost-based deferral rule that reduces error by ${\sim}50\%$ on retained cases.
+Our work differs in three respects: (i)~we derive a \emph{tighter} prevalence-weighted excess risk bound (\cref{thm:bound}) rather than relying on standard importance weighting; (ii)~our three-way deferral emerges from shift-interval disagreement with \emph{zero free parameters}, whereas their deferral requires a cost hyperparameter; and (iii)~we provide a formal conditional risk guarantee on the decided subset (\cref{thm:threeway}), which their framework does not.
+
+% --- Paragraph 6: Conformal methods for language models ---
+\textbf{Hallucination, abstention, and conformal methods for language models.}
+Recent work argues that LLM hallucinations persist in part because training and evaluation reward guessing over acknowledging uncertainty \citep{kalai2025hallucinate}.
+Our work is complementary: rather than modifying pretraining or benchmark design, we study the \emph{deployment-time} question of when a scored LLM should answer, retry, or abstain.
+Recent conformal work on language models includes guaranteed generation quality \citep{quach2024conformal}, cost-efficient cascades \citep{mohri2024language}, and conformal methods for safe generation or QA \citep{kumar2023conformal}.
+These methods focus on generation quality or answer selection; we target \emph{safety-critical abstention} under shift, where the core requirement is that a deployed LLM should know when not to answer.
+
+% ======================================================================
+\section{Background}
+\label{sec:background}
+
+We introduce notation and review the two building blocks our method extends: Conformal Risk Control and importance-weighted calibration under label shift.
+We summarise the key symbols in \cref{tab:notation}.
+
+\begin{table}[t]
+  \caption{Notation summary.}
+  \label{tab:notation}
+  \begin{center}
+    \begin{small}
+      \begin{tabular}{cl}
+        \toprule
+        Symbol                             & Meaning                                        \\
+        \midrule
+        $X, Y$                             & Feature and label random variables             \\
+        $f\!: \mathcal{X} \to [0,1]$       & Scoring function                               \\
+        $\lambda \in [0,1]$                & Decision threshold                             \\
+        $\lamhat$                          & Threshold selected by CRC                      \\
+        $(x_i, y_i)_{i=1}^{N}$             & Calibration data ($N$ samples)                 \\
+        $\cfn,\, \cfp$                     & False-negative / false-positive cost           \\
+        $\alpha$                           & Target risk level                              \\
+        $\pii{y}{tr},\, \pii{y}{dep}$      & Class $y$ prior (train / deploy)               \\
+        $\rhostar$                         & True label-shift odds ratio                    \\
+        $\rhohat$                          & Assumed shift ratio                            \\
+        $w_y$                              & Importance weight $\pii{y}{dep} / \pii{y}{tr}$ \\
+        $\Bpw,\, \Btv$                     & Bound constants (ours / TV)                    \\
+        $\asafe$                           & Adjusted calibration level (recalibration)     \\
+        $\lambda_{\min},\, \lambda_{\max}$ & Three-way defer zone boundaries                \\
+        \bottomrule
+      \end{tabular}
+    \end{small}
+  \end{center}
+  \vskip -0.1in
+\end{table}
+
+\subsection{Conformal Risk Control}
+\label{sec:crc}
+
+Let $f\!: \mathcal{X} \to [0,1]$ be a fixed scoring function and $\lambda \in [0,1]$ a decision threshold, so the prediction is
+\begin{equation}
+  \hat{Y} = \mathbf{1}[f(X) \geq \lambda].
+\end{equation}
+Given calibration data $(x_i, y_i)_{i=1}^{N}$ drawn exchangeably from~$P$, the cost-weighted loss is:
+\begin{align}
+  \loss(\lambda; x, y)
+   & = \cfn \cdot \mathbf{1}[f(x) < \lambda,\; y = 1] \notag   \\
+   & \quad + \cfp \cdot \mathbf{1}[f(x) \geq \lambda,\; y = 0]
+  \label{eq:loss}
+\end{align}
+where $\cfn > \cfp > 0$ reflects asymmetric error costs.
+CRC \citep{angelopoulos2024conformal} selects the smallest $\lamhat$ satisfying:
+\begin{equation}
+  \Rhat(\lamhat) + \frac{b - \Rhat(\lamhat)}{N+1} \leq \alpha
+  \label{eq:crc}
+\end{equation}
+where the empirical risk and loss bound are:
+\begin{align}
+  \Rhat(\lambda) & = \frac{1}{N}\sum_{i=1}^{N}\loss(\lambda; x_i, y_i), &
+  b              & = \sup_{\lambda}\,\loss(\lambda; x, y).
+\end{align}
+This guarantees $\mathbb{E}[\loss(\lamhat; X, Y)] \leq \alpha$ for a new exchangeable point $(X, Y) \sim P$.
+
+\subsection{Label Shift and Importance Weighting}
+\label{sec:label_shift}
+
+Under label shift, the deployment distribution $P_{\mathrm{dep}}$ satisfies:
+\begin{align}
+  \pii{y}{dep}               & \neq \pii{y}{tr},            &
+  P_{\mathrm{dep}}(X \mid Y) & = P_{\mathrm{tr}}(X \mid Y).
+\end{align}
+We parameterise the shift by the odds ratio:
+\begin{equation}
+  \rhostar = \frac{\pii{1}{dep}\, /\, \pii{0}{dep}}{\pii{1}{tr}\, /\, \pii{0}{tr}}
+  \label{eq:rho}
+\end{equation}
+so $\rhostar > 1$ means the positive class is more prevalent at deployment.
+Weighted CRC (W-CRC) restores validity by reweighting calibration losses with importance weights:
+\begin{equation}
+  w_y = \pii{y}{dep} \,/\, \pii{y}{tr}
+  \label{eq:weights}
+\end{equation}
+as introduced by \citet{tibshirani2019conformal}.
+When $\rhostar$ is unknown, Black Box Shift Estimation \citep[BBSE;][]{lipton2018detecting} estimates $w_y$ from the classifier's confusion matrix and unlabelled deployment predictions.
+
+% ======================================================================
+\section{Method}
+\label{sec:method}
+
+We extend CRC to cost-sensitive decision-making under \emph{uncertain} label shift.
+Our method has two components: a tighter excess risk bound (\cref{sec:bound}), and an uncertainty-aware recalibration procedure with three-way decisions that uses this bound to provide guarantees over a shift interval while deferring ambiguous cases (\cref{sec:b4}).
+
+\subsection{Prevalence-Weighted Excess Risk Bound}
+\label{sec:bound}
+
+When W-CRC is calibrated with assumed shift $\rhohat$ but the true shift is $\rhostar \neq \rhohat$, the risk guarantee degrades.
+The standard approach bounds this degradation using the total variation distance between the assumed and true importance weights, with leading constant \citep{barber2023conformal}:
+\begin{equation}
+  \Btv = \max(\cfn,\, \cfp).
+\end{equation}
+We observe that this is loose: the FN and FP contributions to excess risk are each multiplied by the \emph{training prevalence} of the relevant class, which is typically far from~1.
+
+\begin{theorem}[Prevalence-Weighted Bound]
+  \label{thm:bound}
+  Let $\lamhat$ be calibrated at level $\alpha$ under $P_{\mathrm{tr}}$ with assumed shift $\rhohat$, and let $\rhostar$ be the true shift ratio.
+  Define $\boldsymbol{\delta} = \mathbf{w}_{\rhohat} - \mathbf{w}_{\rhostar}$, the importance weight mismatch.
+  Then:
+  \begin{equation}
+    \mathbb{E}_{P_{\mathrm{dep}}}[\loss(\lamhat; X, Y)] \leq \alpha + \Bpw \cdot \lVert \boldsymbol{\delta} \rVert_1 + \frac{\Bpw}{N+1}
+    \label{eq:bound}
+  \end{equation}
+  where $\Bpw = \max\!\bigl(\cfn \cdot \pii{1}{tr},\; \cfp \cdot \pii{0}{tr}\bigr)$.
+\end{theorem}
+
+Since $\pii{y}{tr} < 1$ for both classes in any non-degenerate problem, $\Bpw < \Btv$ strictly.
+The improvement is largest when classes are imbalanced.
+For example, with $\pii{1}{tr} = 0.20$, $\cfn = 1.5$, $\cfp = 1.0$:
+\begin{equation}
+  \Bpw = \max(0.30,\, 0.80) = 0.80
+  \quad\text{vs.}\quad
+  \Btv = 1.50
+\end{equation}
+a 47\% reduction in the leading constant.
+
+\begin{proof}[Proof sketch (full proof in \cref{app:proof})]
+  Under label shift, the expected risk decomposes per class:
+  \begin{align}
+    \Risk_{\rho}(\lambda)
+     & = \cfn \cdot \pii{1}{tr} \cdot w_1(\rho) \cdot \mathrm{FNR}(\lambda) \notag        \\
+     & \quad + \cfp \cdot \pii{0}{tr} \cdot w_0(\rho) \cdot \mathrm{FPR}(\lambda). \notag
+  \end{align}
+  The excess $|\Risk_{\rhostar} - \Risk_{\rhohat}|$ is bounded term-by-term, with each term scaled by $c_y \cdot \pii{y}{tr}$ rather than $c_y$ alone.
+  The maximum over classes yields $\Bpw \cdot \lVert \boldsymbol{\delta} \rVert_1$; the finite-sample correction adds $\Bpw / (N+1)$.
+\end{proof}
+
+The following corollary characterises exactly when the improvement is substantial.
+
+\begin{corollary}[Improvement Regime]
+  \label{cor:regime}
+  Let $\cfn \geq \cfp$ without loss of generality, and define the crossover prevalence $\pi^* = \cfp / (\cfn + \cfp)$.
+  The relative improvement of $\Bpw$ over $\Btv$ is:
+  \begin{equation}
+    1 - \frac{\Bpw}{\Btv} =
+    \begin{cases}
+      1 - \pii{1}{tr} & \text{if } \pii{1}{tr} \geq \pi^*, \\[4pt]
+      1 - \dfrac{\cfp \cdot \pii{0}{tr}}{\cfn} & \text{if } \pii{1}{tr} < \pi^*.
+    \end{cases}
+    \label{eq:regime}
+  \end{equation}
+  In particular, the improvement exceeds $50\%$ when $\pii{1}{tr} < \min\!\bigl(\tfrac{1}{2},\; \cfp / (2\cfn)\bigr)$.
+  The tightening is largest when the expensive error corresponds to the rare class---precisely the regime of medical screening, fraud detection, and other cost-sensitive applications with class imbalance.
+\end{corollary}
+
+The proof follows directly from the definition of $\Bpw$ and case analysis on which term dominates.
+
+A second consequence of the cost-prevalence interaction explains the counterintuitive empirical finding that uncorrected CRC can become \emph{safer} under positive label shift.
+
+\begin{proposition}[Cost-Asymmetry Monotonicity]
+  \label{prop:monotone}
+  Under label shift with fixed threshold $\lambda$, the cost-weighted risk
+  \begin{equation}
+    \Risk(\rho) = \cfn \cdot \pii{1}{dep}(\rho) \cdot \mathrm{FNR}(\lambda) + \cfp \cdot \pii{0}{dep}(\rho) \cdot \mathrm{FPR}(\lambda)
+  \end{equation}
+  is monotonically decreasing in $\rho$ (for $\rho > 0$) if and only if
+  \begin{equation}
+    \cfn \cdot \mathrm{FNR}(\lambda) < \cfp \cdot \mathrm{FPR}(\lambda).
+    \label{eq:monotone}
+  \end{equation}
+  When $\cfn > \cfp$, this holds whenever the classifier's operating point satisfies $\mathrm{FNR}(\lambda) / \mathrm{FPR}(\lambda) < \cfp / \cfn$.
+\end{proposition}
+
+The proof is immediate: under label shift, FNR and FPR are constant in $\rho$, so $\Risk$ is linear in $\pii{1}{dep}(\rho)$ with slope $\cfn \cdot \mathrm{FNR} - \cfp \cdot \mathrm{FPR}$ (full derivation in \cref{app:prop_proof}).
+
+\Cref{prop:monotone} explains why Standard CRC's risk \emph{decreases} under positive shift in our LLM toxicity experiment (\cref{sec:results}): the calibrated threshold satisfies $\mathrm{FNR}/\mathrm{FPR} < \cfp/\cfn$, so increasing $\rho$ actually reduces risk.
+This ``accidentally safe'' behaviour reverses under negative shift ($\rho < 1$), where Standard CRC violates in $97\%$ of seeds.
+
+\subsection{Uncertainty-Aware Recalibration and Three-Way Decisions}
+\label{sec:b4}
+
+Given an uncertainty interval $[\rho_{\mathrm{lo}}, \rho_{\mathrm{hi}}]$ on the shift ratio, we recalibrate CRC to guarantee risk control for \emph{all} $\rhostar$ in that interval, and let deferral emerge from endpoint disagreement.
+
+\textbf{Recalibration.}
+\label{sec:bayesian}
+Using \cref{thm:bound}, the worst-case excess risk over the interval is:
+\begin{align}
+  \epsilon_{\max}
+   & = \Bpw \cdot \max\!\bigl(
+  \lVert \boldsymbol{\delta}_{\rho_{\mathrm{lo}}} \rVert_1,\,
+  \lVert \boldsymbol{\delta}_{\rho_{\mathrm{hi}}} \rVert_1
+  \bigr) + \frac{\Bpw}{N+1}
+  \label{eq:excess}
+\end{align}
+since the excess is monotone in $|\rho - \rhohat|$.
+We calibrate CRC at the adjusted level $\asafe = \alpha - \epsilon_{\max}$ instead of $\alpha$, guaranteeing $\mathbb{E}_{P_{\mathrm{dep}}}[\loss(\lamhat; X, Y)] \leq \alpha$ for any $\rhostar \in [\rho_{\mathrm{lo}}, \rho_{\mathrm{hi}}]$.
+If $\asafe \leq 0$, the interval is too wide for safe calibration; the practitioner must narrow it.
+The key tradeoff is: wider interval $\Rightarrow$ $\epsilon_{\max}\!\uparrow$ $\Rightarrow$ $\asafe\!\downarrow$ $\Rightarrow$ higher FNR.
+
+\textbf{Obtaining the interval.}
+The interval $[\rho_{\mathrm{lo}}, \rho_{\mathrm{hi}}]$ can be specified in two ways:
+\begin{itemize}
+  \item \emph{Label-free mode:} the practitioner specifies it from domain knowledge (e.g., $[0.8, 1.2]$). No deployment data is needed.
+  \item \emph{Data-driven mode:} when unlabelled deployment data is available, we estimate the interval via a Beta-Binomial model. BBSE provides a point estimate $\hat{\pi}_{\mathrm{dep}}$; we convert this to pseudo-observations and compute the posterior:
+  \begin{equation}
+    \pi_{\mathrm{dep}} \mid \text{data} \;\sim\; \mathrm{Beta}(a + n_+,\; b + M - n_+)
+    \label{eq:posterior}
+  \end{equation}
+  with default prior $a = b = 2$.  The $95\%$ credible interval on $\rho$ (obtained by Monte Carlo transform) replaces the hand-specified interval.
+\end{itemize}
+
+\textbf{Three-way decisions.}
+\label{sec:threeway}
+Rather than forcing a binary decision, we calibrate CRC at \emph{both} interval endpoints, producing thresholds $\lambda^{\mathrm{lo}}$ and $\lambda^{\mathrm{hi}}$.
+The decision rule is:
+\begin{equation}
+  f(x) < \lambda_{\min} \Rightarrow \text{negative};\quad
+  f(x) \geq \lambda_{\max} \Rightarrow \text{positive};\quad
+  \text{otherwise} \Rightarrow \textbf{defer} \notag
+\end{equation}
+where $\lambda_{\min} = \min(\lambda^{\mathrm{lo}}, \lambda^{\mathrm{hi}})$ and $\lambda_{\max} = \max(\lambda^{\mathrm{lo}}, \lambda^{\mathrm{hi}})$.
+The defer zone $[\lambda_{\min}, \lambda_{\max})$ contains scores where the two endpoint calibrations disagree.
+More shift uncertainty $\Rightarrow$ wider defer zone $\Rightarrow$ more deferral.
+When $\rho_{\mathrm{lo}} = \rho_{\mathrm{hi}}$, $\lambda_{\min} = \lambda_{\max}$ and the method reduces to standard binary CRC.
+No free parameters are introduced.
+
+\begin{theorem}[Conditional Risk Guarantee]
+  \label{thm:threeway}
+  For any $\rhostar \in [\rho_{\mathrm{lo}}, \rho_{\mathrm{hi}}]$, let $d(\rhostar) = P_{\rhostar}(\lambda_{\min} \leq f(X) < \lambda_{\max})$ be the deferral rate.  Then:
+  \begin{equation}
+    \mathbb{E}_{\rhostar}\bigl[\loss_{\mathrm{3way}}(X, Y) \;\big|\; X \in \mathrm{decided}\bigr]
+    \;\leq\; \frac{\alpha}{1 - d(\rhostar)}.
+    \label{eq:threeway}
+  \end{equation}
+  Moreover, $d(\rhostar)$ is observable from unlabelled deployment scores.
+\end{theorem}
+
+\begin{proof}
+  For $j \in \{\mathrm{lo}, \mathrm{hi}\}$, W-CRC gives $\mathbb{E}_{\rho_j}[\loss(\lambda^j; X, Y)] \leq \alpha$.
+  For any $\rhostar$ in the interval, the excess at $\rhostar$ does not exceed the excess at the farther endpoint (by monotonicity of $\lVert \boldsymbol{\delta} \rVert_1$ in $|\rho - \rhohat|$), so $\mathbb{E}_{\rhostar}[\loss(\lambda^j)] \leq \alpha$.
+  On the decided set $D$, the three-way loss equals the single-threshold loss under $\lambda^j$ (scores above $\lambda_{\max}$ or below $\lambda_{\min}$ are classified identically by both thresholds).
+  Decomposing over decided and deferred sets: $(1 - d) \cdot \mathbb{E}_{\rhostar}[\loss_{\mathrm{3way}} \mid D] \leq \alpha$.
+\end{proof}
+
+% ======================================================================
+\section{Experimental Setup}
+\label{sec:setup}
+
+\subsection{Tasks}
+\label{sec:tasks}
+
+\textbf{LLM Toxicity Detection (headline).}
+Binary toxicity classification on the CivilComments dataset \citep{borkan2019nuanced}, scored by OpenAI's moderation API (harassment category score).
+Calibration pool: 10{,}000 general comments with low identity-attack score (${\sim}6\%$ toxic).
+Deployment pool: 10{,}000 identity-targeting comments with identity-attack score $\geq 0.1$ (${\sim}29\%$ toxic), creating natural label shift ($\rhostar \approx 6.3$).
+Cost asymmetry $\cfn = 5$, $\cfp = 1$: missing toxic content directed at identity groups is far costlier than over-blocking.
+Toxicity subcategory groups (Insult, Threat, Obscene, Identity Attack, Severe) enable per-group burden analysis.
+Label shift is simulated via rejection sampling at $\rhostar \in \{0.5, 1.0, 1.5, 2.0, 3.0, 5.0\}$.
+This experiment directly addresses the central LLM safety question: \emph{when should the system escalate to a human moderator?}
+
+\textbf{Folktables ACSIncome.}
+Income $>\$50$k prediction on the 2018 American Community Survey \citep{fisch2022conformal}.
+  A HistGradientBoosting classifier (AUROC 0.90) is trained on five low-prevalence states (MS, AR, AL, WV, LA) and deployed on five high-prevalence states (MD, NJ, CT, MA, VA).
+  A three-way split---70\% model training, 30\% calibration pool, separate deploy states---ensures calibration scores are out-of-sample.
+  Label shift is simulated via rejection sampling at $\rhostar \in \{0.2, 0.5, 0.67, 1.0, 1.5, 2.0, 3.0, 5.0\}$, spanning both negative shift ($\rhostar < 1$, disease becomes rarer) and positive shift ($\rhostar > 1$, disease becomes more prevalent).
+
+  \textbf{GAIA Agentic QA.}
+  Open-ended question answering on the GAIA benchmark \citep{mialon2023gaia}, a 165-task dataset spanning three difficulty levels (L1: 53, L2: 86, L3: 26) with 23\% requiring file attachments.
+  A GPT-4o-mini agent with simulated tool access (web search, calculator) generates first-pass answers; an LLM-as-judge produces \emph{badness scores} $s \in [0, 1]$ estimating $P(\text{answer is wrong})$.
+  Calibration: L1 tasks (easier).
+  Deployment: L2+L3 tasks (harder), creating \emph{failure-prevalence shift}---the agentic analogue of label shift.
+  The three-way decision rule maps badness scores to actions: answer ($s < \lambda_{\text{lo}}$), retry with reflection ($\lambda_{\text{lo}} \leq s < \lambda_{\text{hi}}$), or hand off to a human ($s \geq \lambda_{\text{hi}}$).
+  This experiment extends the CRC framework from classifier outputs to agentic decision gating.
+
+  \subsection{Baselines}
+  \label{sec:baselines}
+
+  We compare five methods, all using the cost-weighted loss (\cref{eq:loss}):
+  \begin{itemize}
+    \item \textbf{Standard CRC}: no shift correction; calibrates at $\alpha$.
+    \item \textbf{Oracle W-CRC}: importance-weighted CRC with true $\rhostar$ (upper bound on what shift correction can achieve).
+    \item \textbf{BBSE W-CRC}: importance-weighted CRC with BBSE-estimated weights.
+    \item \textbf{Ours (label-free)}: our method in label-free mode; $\rhohat = 1.0$, $[\rho_{\mathrm{lo}}, \rho_{\mathrm{hi}}] = [0.8, 1.2]$.
+    \item \textbf{Ours (data-driven)}: our method in data-driven mode with three-way decisions; $\mathrm{Beta}(2, 2)$ prior, $95\%$ credible level.
+  \end{itemize}
+  For the GAIA agentic experiment, we use the same four gating policies (Always Answer, Standard CRC, Ours label-free, Ours data-driven) but map decisions to agent actions: \emph{answer} (respond autonomously), \emph{retry} (re-attempt with reflection prompt), or \emph{handoff} (escalate to human).
+
+  \subsection{Metrics}
+  \label{sec:metrics}
+
+  For each method and shift level we report the following on $M$ deployment samples over 30 random seeds (mean $\pm$ std):
+  \begin{itemize}
+    \item \textbf{Cost-weighted risk:}
+          $\displaystyle\Rhat = \frac{1}{M}\sum_{j=1}^{M}\loss(\lamhat; x_j, y_j)$
+    \item \textbf{Violation rate:} fraction of seeds where $\Rhat > \alpha$
+    \item \textbf{FNR / FPR:} to disaggregate cost components
+    \item \textbf{Deferral rate:} fraction of samples deferred (Ours data-driven only)
+    \item \textbf{Risk on decided:} cost-weighted risk computed only on non-deferred samples
+  \end{itemize}
+
+  \subsection{Computational Details}
+  \label{sec:details}
+
+  Shared parameters across all experiments:
+  \begin{align}
+    \alpha    & = 0.30,          &
+    N         & = 1{,}000,       &
+    M         & = 2{,}000,       &
+    |\Lambda| & = 1{,}000 \notag
+  \end{align}
+  where $|\Lambda|$ is the threshold grid size over $[0, 1]$.
+  Cost parameters: $\cfn = 5.0$, $\cfp = 1.0$ for LLM toxicity (missing toxic content is 5$\times$ costlier than over-blocking); $\cfn = 1.5$, $\cfp = 1.0$ for Folktables.
+  Label-free recalibration interval: $[0.8, 1.2]$ (approximate exchangeability with 20\% uncertainty).
+  LLM toxicity: 20{,}000 CivilComments scored by OpenAI's \texttt{omni-moderation-latest} model (harassment category score).
+  Folktables: HistGradientBoosting (\texttt{max\_iter}${}=200$, \texttt{max\_depth}${}=6$, \texttt{lr}${}=0.1$).
+
+  % ======================================================================
+  \section{Results}
+  \label{sec:results}
+
+  We organise results around safety-critical LLM deployment, synthesising evidence across datasets.
+  The two main LLM-facing settings are toxicity moderation and GAIA agentic QA; Folktables provides non-LLM support for the same risk-control mechanisms.
+
+  % --- Take-away 0: LLM headline ---
+  \textbf{On LLM toxicity detection, cost asymmetry amplifies risk under negative shift, and our label-free mode provides the widest safety margin.}
+  \Cref{tab:llm,fig:llm_risk} show cost-weighted risk on CivilComments ($\cfn = 5$, $\cfp = 1$, 30 seeds).
+  With high cost asymmetry, Standard CRC violates at $\rhostar = 0.5$ (97\% of seeds) and $\rhostar = 1.0$ (37\%)---the counterintuitive direction predicted by \cref{prop:monotone}.
+  Ours (label-free) eliminates all violations across every shift level by calibrating at $\asafe = 0.228$ (risk $0.225$ at $\rhostar = 1.0$ vs.\ $0.292$ for Standard CRC---a $23\%$ safety margin).
+  Ours (data-driven) matches Oracle and BBSE correction quality while deferring ${\sim}1.4\%$ of ambiguous cases to human review, answering ``when to escalate'' with no tuning.
+  \Cref{fig:llm_subgroup} reveals that the false-negative burden is distributed unevenly across toxicity subcategories, with smaller groups bearing disproportionate FNR.
+
+  \begin{table}[t]
+    \caption{Cost-weighted risk on CivilComments LLM toxicity under label shift ($\alpha = 0.30$, $\cfn = 5$, $\cfp = 1$, 30 seeds). Stars ($*$) denote violation ($\Rhat > \alpha$ in $> 0\%$ of seeds). \textbf{Take-away:} Ours (label-free) eliminates violations everywhere; Standard CRC fails under negative shift.}
+    \label{tab:llm}
+    \begin{center}
+      \begin{small}
+        \input{tables/llm_table.tex}
+      \end{small}
+    \end{center}
+    \vskip -0.1in
+  \end{table}
+
+  \begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{figures/fig_llm_risk_vs_rho.png}
+    \caption{Cost-weighted risk on LLM toxicity detection as $\rhostar$ increases. \textbf{Top:} Mean risk with $\pm 1\sigma$ bands; the high cost asymmetry ($\cfn/\cfp = 5$) amplifies violations under shift. \textbf{Bottom:} Per-seed violation rate.}
+    \label{fig:llm_risk}
+  \end{figure}
+
+  \begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{figures/fig_llm_subgroup_burden.png}
+    \caption{Per-identity-group FNR on LLM toxicity at $\rhostar = 2.0$. \textbf{Take-away:} aggregate risk control masks unequal burden; identity groups with higher baseline toxicity prevalence bear disproportionate false-negative rates.}
+    \label{fig:llm_subgroup}
+  \end{figure}
+
+  % --- Take-away 1 ---
+  \textbf{Our label-free mode provides the widest safety margin without oracle access, at the cost of increased conservatism.}
+  \Cref{tab:main} shows cost-weighted risk across shift levels on Folktables (30 seeds).
+  Under exchangeability ($\rhostar = 1.0$), all methods control risk, but ours (label-free) provides the largest margin: risk $0.221$ vs.\ $0.259$ for Standard CRC, by calibrating at $\asafe = 0.246$ rather than $\alpha = 0.30$.
+  This margin persists under moderate shift ($\rhostar = 1.5$): ours (label-free) risk $0.236$ vs.\ $0.249$ for Standard CRC.
+
+  \begin{table}[t]
+    \caption{Cost-weighted risk on Folktables under simulated label shift ($\alpha = 0.30$, 30 seeds). \textbf{Take-away:} all methods control risk at $\rhostar = 1.0$, but ours (label-free) provides the widest safety margin (risk $0.221$ vs.\ $0.259$); it degrades beyond its assumed interval at $\rhostar \geq 2.0$.}
+    \label{tab:main}
+    \begin{center}
+      \begin{small}
+        \begin{tabular}{llcc}
+          \toprule
+          $\rhostar$ & Method       & Risk                      & Viol.\       \\
+          \midrule
+          1.0        & Standard CRC & $0.259 \pm 0.02$          & 0\%          \\
+          1.0        & BBSE W-CRC   & $0.254 \pm 0.02$          & 0\%          \\
+          1.0        & Ours (l-free) & $\mathbf{0.221 \pm 0.01}$ & \textbf{0\%} \\
+          \midrule
+          2.0        & Standard CRC & $0.237 \pm 0.01$          & 0\%          \\
+          2.0        & Oracle W-CRC & $0.270 \pm 0.02$          & 3\%          \\
+          2.0        & BBSE W-CRC   & $0.259 \pm 0.02$          & 0\%          \\
+          2.0        & Ours (l-free) & $0.254 \pm 0.02$          & 7\%          \\
+          \midrule
+          5.0        & Standard CRC & $0.209 \pm 0.02$          & 0\%          \\
+          5.0        & BBSE W-CRC   & $0.264 \pm 0.03$          & 13\%         \\
+          5.0        & Ours (l-free) & $0.303 \pm 0.05$          & 53\%         \\
+          \bottomrule
+        \end{tabular}
+      \end{small}
+    \end{center}
+    \vskip -0.1in
+  \end{table}
+
+  \begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{figures/fig_real_risk_vs_rho.png}
+    \caption{Cost-weighted risk on Folktables as $\rhostar$ increases. \textbf{Top:} Mean risk with $\pm 1\sigma$ bands across seeds; Standard CRC's upper band crosses $\alpha$ at moderate shift despite safe-looking means. \textbf{Bottom:} Per-seed violation rate; Standard CRC violates $\alpha$ in ${\sim}40\%$ of seeds at $\rho = 0.2$, confirming that mean risk masks individual failures.}
+    \label{fig:risk_vs_rho}
+  \end{figure}
+
+  % --- Take-away 2 ---
+  \textbf{Cost asymmetry produces counterintuitive risk dynamics: uncorrected CRC becomes accidentally safe under positive shift but \emph{violates} under negative shift (\cref{prop:monotone}).}
+  \Cref{fig:risk_vs_rho} and \cref{tab:main} show this clearly: Standard CRC's risk \emph{decreases} from $0.259$ at $\rhostar = 1.0$ to $0.209$ at $\rhostar = 5.0$ (positive shift), but \emph{increases} to $0.295$ at $\rhostar = 0.2$ (negative shift), violating the $\alpha = 0.30$ guarantee in $40\%$ of seeds.
+  \Cref{prop:monotone} identifies the exact condition: $\cfn \cdot \mathrm{FNR}(\lambda) < \cfp \cdot \mathrm{FPR}(\lambda)$, which holds at our calibrated threshold ($\mathrm{FNR}/\mathrm{FPR} \approx 0.34 < \cfp/\cfn = 0.67$).
+  The accidentally-safe effect operates only under positive shift; negative shift reverses the inequality and exposes the unprotected direction.
+
+  % --- Take-away 3 ---
+  \textbf{The tighter bound translates to concrete utility gains and extends recalibration feasibility.}
+  \Cref{tab:utility} compares our label-free recalibration with $\Bpw$ vs.\ $\Btv$ across uncertainty intervals of increasing width.
+  At $[0.6, 1.5]$, the tighter bound yields $43\%$ more positive predictions ($37.8\%$ vs.\ $26.4\%$).
+  At $[0.5, 2.0]$, the TV bound makes recalibration \emph{infeasible} ($\asafe < 0$), while $\Bpw$ still permits safe calibration ($\asafe = 0.086$).
+  The maximum feasible interval width is $63\%$ larger with $\Bpw$.
+  Synthetic validation (\cref{app:additional}) confirms the bound is 27--39\% tighter across $\rhostar \in \{2, 5, 10\}$; as \cref{cor:regime} predicts, the gain is largest when the expensive error ($\cfn$) corresponds to the rare class.
+
+  \begin{table}[t]
+    \caption{Decision-quality comparison: label-free recalibration with $\Bpw$ vs.\ $\Btv$ bound across uncertainty intervals ($\alpha = 0.30$, $N = 1{,}000$, 20 seeds). \textbf{Take-away:} the tighter bound yields higher $\asafe$, more positive predictions, and extends recalibration feasibility to wider intervals.}
+    \label{tab:utility}
+    \begin{center}
+      \begin{small}
+        \begin{tabular}{lcccccc}
+          \toprule
+          Interval & \multicolumn{2}{c}{$\asafe$} & \multicolumn{2}{c}{Pos.\ rate} & \multicolumn{2}{c}{FNR} \\
+          \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+                   & $\Bpw$ & $\Btv$ & $\Bpw$ & $\Btv$ & $\Bpw$ & $\Btv$ \\
+          \midrule
+          $[0.8, 1.2]$ & $.246$ & $.199$ & $44.0\%$ & $39.3\%$ & $0.2\%$ & $0.4\%$ \\
+          $[0.6, 1.5]$ & $.183$ & $.080$ & $37.8\%$ & $26.4\%$ & $0.5\%$ & $2.7\%$ \\
+          $[0.5, 2.0]$ & $.086$ & --- & $27.0\%$ & --- & $2.4\%$ & --- \\
+          \bottomrule
+        \end{tabular}
+      \end{small}
+    \end{center}
+    \vskip -0.1in
+  \end{table}
+
+  % --- Take-away 4 ---
+  \textbf{Three-way decisions provide guaranteed risk control on the decided subset (\cref{thm:threeway}), with zero free parameters.}
+  \Cref{fig:deferral} shows the deferral curve from Experiment~7: as the Bayesian prior becomes less informative ($k \to 0$, i.e., wider credible interval), the deferral rate increases smoothly from near $0\%$ (strong prior, $k = 50$) to the maximum deferral level (weak prior, $k = 0.5$).
+  On Folktables at $\rhostar = 2.0$, ours (data-driven) maintains risk control on the decided subset (\cref{thm:threeway}: conditional risk $\leq \alpha / (1 - d)$) while deferring the ambiguous cases---those where the shift interval creates disagreement about the safe threshold.
+  Critically, no deferral cost hyperparameter is needed: the defer zone is entirely determined by the width of the Bayesian credible interval.
+
+  \begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{figures/fig7_deferral_curve.png}
+    \caption{Deferral rate vs Bayesian prior strength (synthetic, $\rhostar = 3.0$). \textbf{Take-away:} uninformative priors (small $k$) produce wide shift intervals and high deferral; informative priors (large $k$) narrow the interval and reduce deferral. The defer zone emerges from shift uncertainty with no free parameters.}
+    \label{fig:deferral}
+  \end{figure}
+
+  % --- GAIA Agentic ---
+  \subsection{Agentic Decision Gating on GAIA}
+  \label{sec:gaia_results}
+
+  \textbf{CRC-based gating reduces autonomous risk by 47\% under task-difficulty shift.}
+  We apply the CRC framework to LLM agent decisions on the GAIA benchmark, where the ``score'' is a badness estimate $s \in [0,1]$ from an LLM judge and the ``label'' is whether the agent's answer is wrong.
+  \Cref{tab:gaia} and \cref{fig:gaia} show results under difficulty shift (calibrate on L1, deploy on L2+L3, 40 deployment tasks).
+  Without gating (Always Answer), the agent produces wrong answers on $37.5\%$ of deployment tasks.
+  All CRC-based policies reduce autonomous risk to $20.0\%$---a $47\%$ reduction---by routing $62.5\%$ of tasks to human operators.
+  The $30\%$ of tasks answered autonomously achieve a no-human success rate of $30\%$, with the remaining risk concentrated in the hardest tasks where the agent's confidence is highest but incorrect.
+
+  Under modality shift (calibrate on text-only, deploy on attachment-requiring tasks), CRC gating eliminates autonomous risk entirely: all attachment tasks are routed to handoff, correctly identifying that the agent lacks the capability to process file attachments.
+
+  \textbf{When the agent is out of its depth, the method safely escalates 100\% of tasks.}
+  On the full 165-task real GAIA benchmark (where the agent achieves only $2.4\%$ accuracy due to simulated rather than live tools), all CRC-based policies hand off $100\%$ of deployment tasks.
+  This is the correct behaviour: the badness scores are uniformly high, the calibrated threshold reflects near-total failure, and the method refuses to answer autonomously.
+  This ``degenerate but correct'' outcome demonstrates that CRC gating fails safely---it does not produce false confidence when the underlying agent is incapable.
+
+  \begin{table}[t]
+    \caption{GAIA agentic decision gating under task-difficulty shift (L1 $\to$ L2+L3, 40 deployment tasks). \textbf{Take-away:} CRC-based gating reduces autonomous risk from $37.5\%$ to $20.0\%$ by routing uncertain tasks to human operators.}
+    \label{tab:gaia}
+    \begin{center}
+      \begin{small}
+        \input{tables/gaia_table.tex}
+      \end{small}
+    \end{center}
+    \vskip -0.1in
+  \end{table}
+
+  \begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{figures/fig_gaia_policy.png}
+    \caption{GAIA policy comparison under difficulty shift.  \textbf{Left:} autonomous risk (fraction of wrong autonomous answers). \textbf{Centre:} autonomous answer rate. \textbf{Right:} handoff + retry rate.  CRC-based policies trade answer rate for safety, routing $62.5\%$ of tasks to human review.}
+    \label{fig:gaia}
+  \end{figure}
+
+  % ======================================================================
+  \section{Discussion}
+  \label{sec:discussion}
+
+  \textbf{When the method works and when it fails.}
+  Our recalibration provides guaranteed cost-weighted risk control under two conditions: (i)~the true shift $\rhostar$ falls within the interval, and (ii)~the label-shift assumption $P(X \mid Y) = \text{const}$ holds.
+  When violated---e.g., $\rhostar$ outside the interval (Folktables, $\rhostar = 5.0$)---the guarantee breaks, but the failure mode is transparent and testable.
+  The three-way extension answers the operational question \emph{when should a deployed LLM say ``I don't know''?}---on LLM toxicity, the conditional risk on decided cases is at most $\alpha / (1 - d)$ (\cref{thm:threeway}), with $d$ observable from unlabelled scores.
+  The deferral rate doubles as a staffing metric: it tells the practitioner how many cases require human review.
+
+  \textbf{From classifiers to agents: failure-prevalence as label shift.}
+  The GAIA experiment demonstrates that CRC extends naturally from classifier confidence scores to agentic badness scores.
+  The key insight is that \emph{failure prevalence} plays the role of class prevalence: when deployment tasks are harder than calibration tasks, the fraction of wrong answers shifts upward, creating a failure-prevalence shift analogous to label shift.
+  The method works well under controlled conditions (demo tasks with $68\%$ first-pass accuracy) but becomes maximally conservative when the agent fundamentally lacks capability ($2.4\%$ accuracy on real GAIA).
+  In LLM-safety terms, this is precisely the desired failure mode: abstain rather than hallucinate with confidence.
+
+  \textbf{Limitations.}
+  (1)~The LLM toxicity scorer (OpenAI's moderation API) is a black-box; score calibration quality depends on the API model version.
+  (2)~The Bayesian interval relies on BBSE's point estimate; while coverage remains $\geq 84\%$ across all tested shift levels, ill-conditioned confusion matrices could further degrade it.
+  (3)~Our bound, while tighter than the TV bound and yielding concrete utility gains (\cref{tab:utility}), remains conservative relative to realised risk.
+  (4)~We evaluate binary classification only; extension to multi-class toxicity categories with structured costs is non-trivial.
+  (5)~The GAIA agent uses simulated tools (no live web search), limiting first-pass accuracy to $2.4\%$ on real tasks; with live tools the method would operate in a more informative regime where the answer/retry/handoff distinctions become meaningful at scale.
+
+  \textbf{Future work.}
+  While \cref{thm:threeway} provides a conditional risk guarantee of $\alpha / (1-d)$, tighter bounds that exploit the score distribution within the decided region may be achievable.
+  For LLM safety, extending the framework to multi-label toxicity detection (harassment, hate speech, self-harm) with structured cost matrices is a natural next step.
+  Beyond this: online conformal risk control for streaming content moderation, using LLM logprobs as native confidence scores for hallucination prevention and agentic deferral, and scaling the gating layer to multi-step agent workflows with live tool access where intermediate failure modes (tool errors, reasoning loops) create richer score distributions.
+
+  % ======================================================================
+  \section{Conclusion}
+  \label{sec:conclusion}
+
+  We have extended Conformal Risk Control to cost-sensitive decision-making under uncertain label shift, motivated by a practical LLM-safety question: \emph{when should a model answer, and when should it say ``I don't know''?}
+  Our prevalence-weighted bound tightens the standard TV bound by 27--39\%, and the recalibration procedure translates uncertainty about shift magnitude into an explicit safety--utility tradeoff---with three-way abstention emerging from endpoint disagreement with no free parameters (\cref{thm:threeway}).
+  On LLM toxicity detection, recalibration eliminates all risk violations while three-way decisions answer ``when to escalate'' with formal guarantees.
+  On the GAIA agentic benchmark, CRC-based gating reduces autonomous risk in a controlled difficulty-shift demo and correctly abstains when the underlying agent lacks capability on the full benchmark.
+  The main message is deployment-time rather than training-time: we do not remove hallucinations from the model, but we can make a deployed LLM far less likely to answer unsafely when uncertainty is high.
+
+  % ======================================================================
+  \section*{Impact Statement}
+
+  This paper studies a deployment-time safety layer for LLM systems under distribution shift, especially in settings where a confident wrong answer is worse than abstaining.
+  Our primary finding is methodological: risk control can be used to decide when a deployed LLM should answer, retry, or hand off, but natural deployment shift can still violate the underlying assumptions and subgroup burden can remain hidden beneath aggregate metrics.
+  The LLM toxicity experiment shows that subgroup burden can remain uneven even when aggregate risk is controlled; the GAIA experiment shows that the same machinery can force abstention when an agent is out of its depth.
+  These findings are demonstrated on public benchmarks, not in production deployments.
+  Any application to production medical, legal, or other safety-critical decision support would require prospective validation with held-out scoring models, domain experts, and human-adjudicated outcomes, which is beyond the scope of this work.
+  Our results should therefore be read as a proof of concept for safer LLM deployment, not as evidence of deployment readiness in high-stakes domains.
+
+  \bibliography{references}
+  \bibliographystyle{icml2026}
+
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  \newpage
+  \appendix
+  \onecolumn
+
+  \section{Proof of \texorpdfstring{\cref{thm:bound}}{Theorem 4.1}}
+  \label{app:proof}
+
+  Let $\Risk_{\rho}(\lambda) = \mathbb{E}_{P_{\rho}}[\loss(\lambda; X, Y)]$ denote the expected cost-weighted risk under shift ratio $\rho$.
+  Under label shift, $P_{\mathrm{dep}}(X \mid Y) = P_{\mathrm{tr}}(X \mid Y)$, so the risk decomposes as:
+  \begin{align}
+    \Risk_{\rho}(\lambda)
+     & = \cfn \cdot \pii{1}{tr} \cdot w_1(\rho) \cdot \mathrm{FNR}(\lambda)
+    + \cfp \cdot \pii{0}{tr} \cdot w_0(\rho) \cdot \mathrm{FPR}(\lambda)
+    \label{eq:risk_decomp}
+  \end{align}
+  where $w_y(\rho) = P_\rho(Y = y) / \pii{y}{tr}$ and $\mathrm{FNR}(\lambda) = P(f(X) < \lambda \mid Y = 1)$, $\mathrm{FPR}(\lambda) = P(f(X) \geq \lambda \mid Y = 0)$ are properties of the scoring function under $P_{\mathrm{tr}}(X \mid Y)$.
+
+  The difference between the risk under the true shift $\rhostar$ and the assumed shift $\rhohat$ is:
+  \begin{align}
+    |\Risk_{\rhostar}(\lambda) - \Risk_{\rhohat}(\lambda)|
+     & = \bigl|\cfn \cdot \pii{1}{tr} \cdot \bigl(w_1(\rhostar) - w_1(\rhohat)\bigr) \cdot \mathrm{FNR}(\lambda)
+    + \cfp \cdot \pii{0}{tr} \cdot \bigl(w_0(\rhostar) - w_0(\rhohat)\bigr) \cdot \mathrm{FPR}(\lambda)\bigr|    \\
+     & \leq \cfn \cdot \pii{1}{tr} \cdot |w_1(\rhostar) - w_1(\rhohat)|
+    + \cfp \cdot \pii{0}{tr} \cdot |w_0(\rhostar) - w_0(\rhohat)|                                                \\
+     & \leq \Bpw \cdot \bigl(|w_1(\rhostar) - w_1(\rhohat)| + |w_0(\rhostar) - w_0(\rhohat)|\bigr)               \\
+     & = \Bpw \cdot \lVert \boldsymbol{\delta} \rVert_1
+  \end{align}
+  where $\Bpw = \max(\cfn \cdot \pii{1}{tr},\, \cfp \cdot \pii{0}{tr})$ and $\boldsymbol{\delta} = \mathbf{w}_{\rhohat} - \mathbf{w}_{\rhostar}$.
+
+  CRC calibrated at level $\alpha$ under $\rhohat$ guarantees:
+  \begin{equation}
+    \Risk_{\rhohat}(\lamhat) \leq \alpha + \frac{\Bpw}{N+1}
+  \end{equation}
+  Combining:
+  \begin{equation}
+    \Risk_{\rhostar}(\lamhat) \leq \Risk_{\rhohat}(\lamhat) + \Bpw \cdot \lVert \boldsymbol{\delta} \rVert_1 \leq \alpha + \Bpw \cdot \lVert \boldsymbol{\delta} \rVert_1 + \frac{\Bpw}{N+1}
+  \end{equation}
+  which is \cref{eq:bound}. \qed
+
+  \section{Proof of \texorpdfstring{\cref{prop:monotone}}{Proposition 4.3}}
+  \label{app:prop_proof}
+
+  Under label shift, $P(X \mid Y = y)$ is invariant, so $\mathrm{FNR}(\lambda)$ and $\mathrm{FPR}(\lambda)$ are constant in $\rho$.
+  The deployment prevalence $\pii{1}{dep}(\rho) = \rho \cdot \pii{1}{tr} / (\rho \cdot \pii{1}{tr} + \pii{0}{tr})$ is strictly increasing in $\rho$, and $\pii{0}{dep} = 1 - \pii{1}{dep}$.
+  Since $\Risk$ is linear in $\pii{1}{dep}$, $\partial \Risk / \partial \pii{1}{dep} = \cfn \cdot \mathrm{FNR}(\lambda) - \cfp \cdot \mathrm{FPR}(\lambda)$.
+  This is negative precisely when $\cfn \cdot \mathrm{FNR}(\lambda) < \cfp \cdot \mathrm{FPR}(\lambda)$. \qed
+
+  \section{Experimental Details}
+  \label{app:details}
+
+  \subsection{LLM Toxicity Detection (CivilComments)}
+
+  Data from the CivilComments dataset \citep{borkan2019nuanced} via HuggingFace \texttt{datasets}.
+  20{,}000 comments (10{,}000 calibration pool, 10{,}000 deployment pool).
+  Calibration pool: comments with identity-attack score $< 0.1$ ($6.0\%$ toxic).
+  Deployment pool: comments with identity-attack score $\geq 0.1$ ($28.7\%$ toxic), creating natural label shift ($\rhostar \approx 6.3$).
+  Scoring: OpenAI's \texttt{omni-moderation-latest} moderation API, \texttt{harassment} category score $\in [0, 1]$.
+  Ground truth: binarised at toxicity $\geq 0.5$.
+  Cost parameters: $\cfn = 5.0$ (missing toxic content), $\cfp = 1.0$ (over-blocking).
+  Subgroups by dominant toxicity subcategory: Insult (56.2\%), Identity Attack (37.5\%), Threat (4.1\%), Obscene (2.1\%), Severe ($<0.1\%$).
+  Label shift simulated via rejection sampling at $\rhostar \in \{0.5, 1.0, 1.5, 2.0, 3.0, 5.0\}$.
+
+  \subsection{Folktables ACSIncome}
+
+  Data from the 2018 American Community Survey via the \texttt{folktables} package.
+  Training states (low positive prevalence): MS, AR, AL, WV, LA.
+  Deployment states (high positive prevalence): MD, NJ, CT, MA, VA.
+  Classifier: \texttt{HistGradientBoostingClassifier} with \texttt{max\_iter=200}, \texttt{max\_depth=6}, \texttt{learning\_rate=0.1}, \texttt{random\_state=42}.
+  Three-way split: model training (70\%), calibration pool (30\%), separate deployment states.
+  AUROC: 0.90 (training), 0.88 (calibration pool).
+  Label shift simulated via rejection sampling: positive samples retained with probability $\min(1, \rhostar \cdot \pii{1}{tr} / \pii{0}{tr})$, then randomly downsampled to $N$ calibration and $M$ deployment points.
+
+  \subsection{Folktables ACSPublicCoverage}
+
+  Data from the 2018 ACS using a disjoint set of states from ACSIncome.
+  Training states (Medicaid non-expansion, low coverage prevalence 21.5\%): TX, FL, GA, NC, TN.
+  Deployment states (Medicaid expansion, high coverage prevalence 36.9\%): NY, CA, MN, OR, WA.
+  Classifier: same HistGradientBoosting configuration as ACSIncome.
+  Three-way split: identical protocol (70\% model training, 30\% calibration pool, separate deployment states).
+  Natural shift ratio: $\rhostar \approx 2.1$, driven by Medicaid policy rather than geographic income variation.
+
+  \subsection{GAIA Agentic QA}
+
+  Data from the GAIA benchmark \citep{mialon2023gaia} via HuggingFace (gated dataset, validation split).
+  165 tasks: 53 Level~1, 86 Level~2, 26 Level~3; 38 (23\%) require file attachments.
+  Agent: GPT-4o-mini with tool-calling (simulated web search and calculator; no live tool access).
+  First-pass accuracy: $2.4\%$ on real tasks (limited by simulated tools); $68\%$ on controlled demo tasks.
+  Scoring: LLM-as-judge (GPT-4o-mini) produces badness scores $s \in [0,1]$.
+  Difficulty split: L1 calibration, L2+L3 deployment (40 tasks).
+  Modality split: text-only calibration (127 tasks), attachment-requiring deployment (38 tasks).
+  Demo experiment uses 60 controlled tasks (20 per level) with natural difficulty gradient and known ground truth.
+  Cost parameters: $\cfn = 5.0$ (wrong autonomous answer), $\cfp = 1.0$ (unnecessary handoff).
+
+  \subsection{PACPS Heart Disease Replication}
+
+  CDC Heart Disease dataset, following the protocol of \citet{fisch2022conformal}.
+  Methods: PS (uncorrected), PS-C (oracle correction), PS-R (point estimate), PS-W (worst-case), PS-MIW (max importance weight).
+  3 seeds.
+  PS violates coverage in 100\% of runs; all corrected methods achieve 0\% violation rate, matching the published results.
+
+  \section{Additional Results}
+  \label{app:additional}
+
+  \subsection{Bound Tightness}
+
+  \begin{table}[h]
+    \caption{Prevalence-weighted bound vs.\ TV bound across shift ratios ($\pii{1}{tr} = 0.20$, $\cfn = 1.5$, $\cfp = 1.0$, $N = 1{,}000$). Our bound is uniformly tighter, with increasing advantage at larger $\rhostar$.}
+    \label{tab:bound}
+    \begin{center}
+      \begin{small}
+        \begin{tabular}{ccccc}
+          \toprule
+          $\rhostar$ & Risk  & $\Bpw$ bound & $\Btv$ bound & Improv. \\
+          \midrule
+          2.0        & 0.243 & 0.514        & 0.701        & 27\%    \\
+          5.0        & 0.161 & 0.870        & 1.368        & 36\%    \\
+          10.0       & 0.105 & 1.124        & 1.844        & 39\%    \\
+          \bottomrule
+        \end{tabular}
+      \end{small}
+    \end{center}
+  \end{table}
+
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/fig1_bound_tightness.png}
+    \caption{Bound comparison across shift ratios (synthetic). The prevalence-weighted bound ($\Bpw$, orange) is 27--39\% tighter than the TV bound ($\Btv$, grey) while both remain conservative relative to realised risk (blue).}
+    \label{fig:bound}
+  \end{figure}
+
+  \subsection{Bayesian Interval Coverage}
+
+  To evaluate robustness to BBSE estimation error, we measure the frequentist coverage of the $95\%$ Bayesian credible interval across $\rhostar \in \{1, 1.5, 2, 3, 5\}$ (50 seeds each).
+  Coverage is $98\%$ at $\rhostar = 1.0$, $96\%$ at $\rhostar = 1.5$, $90$--$92\%$ at $\rhostar = 2$--$3$, and $84\%$ at $\rhostar = 5.0$ (extreme shift), with near-zero bias ($\leq +0.03$).
+  The interval widens appropriately as shift grows ($0.22$ at $\rhostar = 1$ to $0.88$ at $\rhostar = 5$).
+
+  \subsection{Safety--Utility Tradeoff}
+
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig3_recal_efficiency.png}
+    \caption{Label-free recalibration safety--utility tradeoff (synthetic). \textbf{Left:} wider uncertainty interval $\delta$ increases the negative prediction rate (more conservative). \textbf{Right:} realised risk stays well below $\alpha = 0.3$ across assumed shift ratios. The guarantee holds at every point.}
+    \label{fig:efficiency}
+  \end{figure}
+
+  \begin{table}[h]
+    \caption{Label-free recalibration safety--utility tradeoff as interval half-width $\delta$ varies ($\rhohat = 1.0$, $\alpha = 0.30$, synthetic data). \textbf{Take-away:} the tradeoff is smooth; the guarantee holds at every point.}
+    \label{tab:tradeoff}
+    \begin{center}
+      \begin{small}
+        \begin{tabular}{cccc}
+          \toprule
+          Half-width $\delta$ & $\asafe$ & Realised risk & Positive rate \\
+          \midrule
+          0.05                & 0.286    & 0.200         & 0.372         \\
+          0.10                & 0.273    & 0.191         & 0.381         \\
+          0.20                & 0.246    & 0.172         & 0.402         \\
+          0.30                & 0.217    & 0.150         & 0.426         \\
+          0.50                & 0.157    & 0.112         & 0.466         \\
+          0.80                & 0.123    & 0.092         & 0.491         \\
+          \bottomrule
+        \end{tabular}
+      \end{small}
+    \end{center}
+  \end{table}
+
+  \subsection{Cost Sensitivity}
+
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{figures/fig4_cost_sensitivity.png}
+    \caption{Effect of cost ratio $\cfn / \cfp$ on $\Bpw$ and $\asafe$ (synthetic). \textbf{Take-away:} as cost asymmetry grows, $\Bpw$ increases linearly and $\asafe$ shrinks; recalibration becomes infeasible at extreme ratios.}
+    \label{fig:cost}
+  \end{figure}
+
+  \begin{table}[h]
+    \caption{Effect of cost ratio $\cfn / \cfp$ on the prevalence-weighted bound and $\asafe$ ($\pii{1}{tr} = 0.20$, $\delta = 0.2$, $N = 1{,}000$). \textbf{Take-away:} recalibration remains feasible up to $\cfn / \cfp = 20$; beyond that, $\asafe$ approaches zero.}
+    \label{tab:cost}
+    \begin{center}
+      \begin{small}
+        \begin{tabular}{cccc}
+          \toprule
+          $\cfn / \cfp$ & $\Bpw$ bound & $\asafe$ & Feasible? \\
+          \midrule
+          2             & 0.870        & 0.246    & Yes       \\
+          5             & 1.012        & 0.232    & Yes       \\
+          10            & 1.724        & 0.165    & Yes       \\
+          15            & 2.436        & 0.097    & Yes       \\
+          20            & 3.148        & 0.029    & Yes       \\
+          \bottomrule
+        \end{tabular}
+      \end{small}
+    \end{center}
+  \end{table}
+
+  \subsection{Exchangeability Sanity Check}
+
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/fig_exchangeability.png}
+    \caption{Cost-weighted risk under exchangeability ($\rhostar = 1.0$, Folktables, 30 seeds). \textbf{Take-away:} Ours (label-free) has the largest safety margin (risk $0.244$ vs.\ $\alpha = 0.3$); other methods operate near the boundary with risk $\approx 0.30$.}
+    \label{fig:exchangeability}
+  \end{figure}
+
+  \subsection{Method Breakdown Under Increasing Shift}
+
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{figures/fig2_breakdown_curve.png}
+    \caption{Realised cost-weighted risk as $\rhostar$ increases (synthetic). \textbf{Take-away:} Standard and Symmetric CRC risk drops (cost asymmetry effect); Oracle/BBSE maintain risk near $\alpha$; ours (label-free) decreases most aggressively due to conservative calibration.}
+    \label{fig:breakdown}
+  \end{figure}
+
+  \section{Reproducibility}
+  \label{app:reproducibility}
+
+  \textbf{Code.}
+  All experiments, tests, and figure generation are contained in a single repository.
+  The master runner \texttt{run\_all.py} executes the full pipeline: unit tests $\to$ PACPS replication $\to$ Folktables ACSIncome (exp0, exp6) $\to$ ACSPublicCoverage (exp8) $\to$ deferral curve (exp7) $\to$ synthetic experiments (exp1--exp4) $\to$ GAIA agentic experiment (exp12) $\to$ figure and table generation.
+  A single command reproduces all results:
+  \begin{verbatim}
+  uv run python run_all.py
+\end{verbatim}
+
+  \textbf{Data.}
+  Folktables uses the 2018 American Community Survey via the \texttt{folktables} Python package, which downloads data automatically.
+  The PACPS Heart Disease benchmark uses the CDC Heart archive following the protocol of \citet{fisch2022conformal}.
+
+  \textbf{Dependencies.}
+  Python $\geq 3.13$, managed via \texttt{uv}.
+  Core: NumPy, SciPy, pandas, scikit-learn, matplotlib, seaborn.
+  GAIA: OpenAI API (GPT-4o-mini for agent and judge), HuggingFace \texttt{datasets}.
+  All dependencies are pinned in \texttt{uv.lock}.
+
+  \textbf{Computational requirements.}
+  Folktables experiments and all synthetic experiments complete in under 5 minutes on a single CPU core.
+
+  \textbf{Random seeds.}
+  All experiments use fixed seeds (0--29 for 30-seed experiments).
+  The Bayesian shift estimation uses seed-controlled Monte Carlo sampling (10{,}000 draws).
+
+  \textbf{Test suite.}
+  58 unit tests cover: CRC validity under exchangeability, bound non-negativity, BBSE consistency, recalibration sanity, Bayesian posterior correctness, credible interval coverage ($\geq 85\%$ over 100 simulated trials), three-way decision zone properties, deferral rate arithmetic, GAIA episode schema, judge score parsing, and policy action mapping.
+
+\end{document}

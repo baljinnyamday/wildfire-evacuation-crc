@@ -1,0 +1,41 @@
+[project]
+name = "fire"
+version = "0.1.0"
+description = "Wildfire spread prediction research pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "kaggle>=1.7",
+  "lightgbm>=4.3",
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "scikit-learn>=1.4",
+  "torch>=2.2",
+  "tfrecord>=1.14",
+  "tifffile>=2024.2.12",
+  "matplotlib>=3.8",
+  "pymupdf>=1.27.2",
+  "python-pptx>=1.0.2",
+]
+
+[project.scripts]
+fire-download-ndws = "fire.data.download:main"
+fire-prepare-phase1 = "fire.data.prepare:main"
+fire-train-tabular-baseline = "fire.models.tabular_baseline:main"
+fire-train-spatial-baseline = "fire.models.spatial_baseline:main"
+fire-calibrate-crc = "fire.conformal.calibrate:main"
+fire-evaluate = "fire.eval.evaluate:main"
+fire-plot = "fire.eval.plot:main"
+fire-plot-extra = "fire.eval.plot_extra:main"
+fire-plot-risk = "fire.eval.plot_risk_map:main"
+fire-plot-compare = "fire.eval.plot_comparison:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fire*"]
+
+[tool.uv]
+package = true

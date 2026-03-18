@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environments
+.venv/
+.env
+
+# Data (see data/README.md for download instructions)
+data/raw/
+data/predictions/
+data/evaluation/
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+missfont.log
+texput.log
+
+# Built PDFs (compile from source)
+icml2026/paper_draft.pdf
+icml2026/paper_draft_v0.pdf
+icml2026/example_paper.pdf
+icml2026/icml_numpapers.pdf
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Project-internal
+.claude/
+status/
+agents.md
+rubric.pdf
+uv.lock
