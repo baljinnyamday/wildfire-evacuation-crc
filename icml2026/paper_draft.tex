@@ -43,7 +43,7 @@ We expose a stark failure: across three model families of increasing complexity-
 CRC eliminates this failure uniformly.
 Our central finding is that \emph{model architecture determines evacuation efficiency, while CRC determines safety}: a 470K-parameter U-Net with CRC achieves 94.7\% fire coverage while flagging only 14.9\% of pixels---4.2$\times$ more efficient than LightGBM---while the architecturally more complex 229K-parameter graph model achieves lower AUROC.
 We further propose a three-way CRC extension producing SAFE/MONITOR/EVACUATE zones for operational triage, and characterize a fundamental limitation of prevalence-weighted bounds under extreme class imbalance (${\sim}5\%$ fire prevalence).
-All models, calibration code, and evaluation pipelines are released for reproducibility.
+All models, calibration code, and evaluation pipelines are released for reproducibility.\footnote{\url{https://github.com/baljinnyamday/wildfire-evacuation-crc}}
 \end{abstract}
 
 %% ============================================================
@@ -85,7 +85,7 @@ With CRC, the simplest spatial model achieves 94.7\% coverage while flagging onl
 \item We demonstrate that standard probability thresholding is \emph{catastrophically unsafe} for wildfire evacuation across three model families, with fire coverage ranging from 7\% to 52\%.
 \item We show that CRC provides guaranteed ${\ge}95\%$ fire coverage regardless of model quality, and that architecture determines \emph{efficiency} (evacuation zone size)---with spatial models achieving 4.2$\times$ tighter zones than tabular baselines under the same safety guarantee.
 \item We propose a three-way CRC extension with SAFE/MONITOR/EVACUATE zones and characterize its behavior under extreme class imbalance, identifying a fundamental limitation of prevalence-weighted bounds when $\pi_0 \gg \pi_1$.
-\item We provide a complete, reproducible pipeline with deterministic splits and open-source code for all experimental phases.
+\item We provide a complete, reproducible pipeline with deterministic splits and open-source code for all experimental phases.\footnote{\url{https://github.com/baljinnyamday/wildfire-evacuation-crc}}
 \end{itemize}
 
 %% ============================================================
@@ -489,7 +489,7 @@ Potential positive impact includes better risk-aware public safety planning.
 Potential negative impact includes over-reliance on automated recommendations; we mitigate this through the three-way framework that routes uncertain pixels to human review.
 
 \section*{Software and Data}
-All code, trained models, and evaluation pipelines are maintained in a reproducible repository with deterministic data splits and CLI entry points for each phase.
+All code, trained models, and evaluation pipelines are available at \url{https://github.com/baljinnyamday/wildfire-evacuation-crc}, with deterministic data splits (seed 42, 70/15/15) and CLI entry points for each phase.
 The dataset is NDWS \citep{ndwsdataset}, subject to its original terms of use.
 
 \bibliography{paper_draft}
