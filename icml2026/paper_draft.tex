@@ -120,33 +120,30 @@ With CRC, all three models achieve ${\ge}94\%$ coverage, but spatial models flag
 \section{Related Work}
 
 \paragraph{Machine learning for wildfire prediction.}
-Machine learning has been extensively applied to wildfire risk assessment, spread prediction, and resource allocation \citep{jain2020review}.
-Deep learning approaches, including CNNs, recurrent architectures, and encoder-decoder models, have demonstrated strong performance on next-day spread prediction tasks \citep{radke2019firecast}.
-The NDWS dataset \citep{huot2022next} established a standardized benchmark for pixel-level wildfire spread prediction from remote-sensing data, enabling systematic comparison across architectures.
-Graph neural networks \citep{kipf2017semi, veličković2018graph} have been explored for modeling fire propagation dynamics, motivated by the intuition that fire spreads along spatial adjacency relations.
-However, \emph{every} existing work in this domain evaluates exclusively on accuracy-based metrics (F1, IoU, AUROC).
-None provides formal safety guarantees on the false negative rate, the metric that determines whether an evacuation zone actually contains the fire.
+Machine learning has been widely applied to wildfire risk assessment and spread prediction \citep{jain2020review, radke2019firecast}.
+The NDWS dataset \citep{huot2022next} established a standardized pixel-level benchmark, enabling systematic comparison across architectures including graph neural networks for spatial propagation \citep{kipf2017semi, veličković2018graph}.
+However, \emph{every} existing work evaluates exclusively on accuracy-based metrics (F1, IoU, AUROC); none provides formal safety guarantees on the false negative rate.
 
 \paragraph{Conformal prediction and distribution-free inference.}
-Conformal prediction, introduced by \citet{vovk2005algorithmic} and surveyed by \citet{shafer2008tutorial}, provides distribution-free prediction sets with guaranteed finite-sample coverage under exchangeability.
-\citet{romano2020classification} extended conformal methods to classification with adaptive prediction sets, and \citet{barber2021predictive} developed the Jackknife+ for predictive inference without sample splitting.
-\citet{angelopoulos2022conformal} generalized these ideas to \emph{conformal risk control} (CRC), which controls arbitrary monotone loss functions, including the false negative rate loss central to our work.
-\citet{angelopoulos2021gentle} provides an accessible treatment of the key ideas.
-CRC has since been applied to medical imaging, autonomous driving, and natural language processing, yet applications to geospatial hazard prediction remain largely unexplored.
-To our knowledge, \textbf{this is the first application of conformal risk control to wildfire spread prediction}, where the asymmetric cost structure (missed fires endanger lives; over-broad zones cause shadow evacuations and traffic gridlock \citep{zhao2022evacuation}) makes formal FNR guarantees uniquely valuable.
+Conformal prediction \citep{vovk2005algorithmic, shafer2008tutorial} provides distribution-free prediction sets with finite-sample coverage guarantees under exchangeability.
+\citet{romano2020classification} extended these ideas to adaptive classification, and \citet{angelopoulos2022conformal} generalized them to \emph{conformal risk control} (CRC), which controls arbitrary monotone loss functions---including the FNR loss central to our work.
+CRC has been applied in medical imaging and autonomous driving, yet geospatial hazard prediction remains unexplored.
+To our knowledge, \textbf{this is the first application of CRC to wildfire spread prediction}, where the asymmetric cost structure---missed fires endanger lives; over-broad zones cause shadow evacuations \citep{zhao2022evacuation}---makes formal FNR guarantees uniquely valuable.
 
 \paragraph{Uncertainty quantification and calibration.}
-\citet{guo2017calibration} demonstrated that modern neural networks are poorly calibrated, with confidence scores that do not reflect true probabilities.
-Standard recalibration methods such as Platt scaling \citep{platt1999probabilistic} and temperature scaling \citep{guo2017calibration} improve calibration but provide no finite-sample coverage guarantees.
-Recent work has explored Bayesian and ensemble-based uncertainty quantification for wildfire forecasting, but these methods produce heuristic uncertainty estimates without distribution-free guarantees.
-Our work shows that even well-calibrated models remain unsafe under standard thresholding due to the extreme class imbalance inherent in wildfire data (${\sim}5\%$ fire pixels), motivating distribution-free methods that provide formal bounds rather than approximate confidence.
+Modern neural networks are poorly calibrated \citep{guo2017calibration}, and standard recalibration methods such as Platt scaling \citep{platt1999probabilistic} and temperature scaling improve confidence estimates but provide no finite-sample coverage guarantees.
+We show that even well-calibrated models remain unsafe under standard thresholding due to the extreme class imbalance in wildfire data (${\sim}5\%$ fire pixels), motivating distribution-free bounds rather than approximate confidence.
+
+\paragraph{Cost-sensitive learning and spatial extremes.}
+Focal loss \citep{lin2017focal} and cost-sensitive learning \citep{elkan2001foundations} improve empirical recall under imbalance but provide no finite-sample FNR bound.
+Neyman--Pearson classification \citep{scott2005neyman} targets a type-II error constraint with only asymptotic guarantees.
+Spatial extreme-value theory \citep{coles2001introduction, davison2012statistical} models tail behavior of spatial processes but requires parametric assumptions unsuited to pixel-level spread prediction.
+CRC is complementary: distribution-free, finite-sample, and applicable post-hoc to any model---including those already trained with cost-sensitive losses.
 
 \paragraph{Safety-critical machine learning.}
-\citet{amodei2016concrete} outlined fundamental challenges in deploying ML systems safely, including distributional shift and reward hacking.
-In safety-critical domains such as medical diagnosis and autonomous systems, the cost of false negatives far exceeds that of false positives, motivating methods that provide formal guarantees rather than empirical performance alone.
-Wildfire evacuation exemplifies this asymmetry more starkly than most domains: a missed fire pixel risks lives, while an over-broad perimeter causes cascading logistical failures in transportation networks \citep{zhao2022evacuation}.
-Yet this is precisely the domain where formal safety guarantees have been absent.
-Our work closes this gap: we demonstrate that the difference between standard thresholds and CRC-calibrated thresholds corresponds to a 23--87 percentage-point improvement in fire detection rate.
+In safety-critical domains, the cost of false negatives far exceeds that of false positives, motivating formal guarantees over empirical performance alone \citep{amodei2016concrete}.
+Wildfire evacuation is a stark example---yet it is precisely the domain where such guarantees have been absent.
+Our work closes this gap, demonstrating a 23--87 percentage-point improvement in fire detection rate when replacing standard thresholds with CRC-calibrated ones.
 
 %% ============================================================
 %% 3. PRELIMINARIES
