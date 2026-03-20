@@ -26,6 +26,8 @@ data/evaluation/
 *.fls
 missfont.log
 texput.log
+**/node_modules/**
+**/package-lock.json
 
 # Built PDFs (compile from source)
 icml2026/paper_draft.pdf
@@ -48,3 +50,4 @@ status/
 agents.md
 rubric.pdf
 uv.lock
+.agents/
