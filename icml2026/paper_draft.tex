@@ -4,10 +4,30 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{hyperref}
-\usepackage[accepted]{icml2026}
+\usepackage[preprint]{icml2026}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{mathtools}
+\usepackage{xcolor}
+\usepackage{listings}
+\lstdefinestyle{pseudocode}{
+  basicstyle=\small\fontfamily{cmtt}\selectfont,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color[rgb]{0.4,0.4,0.4},
+  keywords={def,for,in,if,return},
+  morecomment=[l]{\#},
+  mathescape=true,
+  frame=single,
+  framesep=6pt,
+  xleftmargin=4pt,
+  xrightmargin=4pt,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=6pt,
+  aboveskip=8pt,
+  belowskip=4pt,
+  columns=fullflexible,
+}
 \usepackage[capitalize,noabbrev]{cleveref}
 \urlstyle{same}  % use document font for \url, avoids missing Courier
 
@@ -21,33 +41,33 @@
 \begin{document}
 
 \twocolumn[
-\icmltitle{Conformal Risk Control for Safety-Critical Wildfire Evacuation Mapping:\\
-A Comparative Study of Tabular, Spatial, and Graph-Based Models}
+    \icmltitle{Conformal Risk Control for Safety-Critical Wildfire Evacuation Mapping:\\
+        A Comparative Study of Tabular, Spatial, and Graph-Based Models}
 
-\begin{icmlauthorlist}
-\icmlauthor{Baljinnyam Dayan}{imperial}
-\end{icmlauthorlist}
-\icmlaffiliation{imperial}{Imperial College London, London, United Kingdom}
-\icmlcorrespondingauthor{Baljinnyam Dayan}{baljinnyam.dayan25@imperial.ac.uk}
-% CID: 06059151
-\icmlkeywords{wildfire prediction, conformal risk control, safety-critical machine learning, uncertainty quantification}
-\printAffiliationsAndNotice{}
-\vskip 0.3in
+    \begin{icmlauthorlist}
+        \icmlauthor{Baljinnyam Dayan}{imperial}
+    \end{icmlauthorlist}
+    \icmlaffiliation{imperial}{Imperial College London, London, United Kingdom}
+    \icmlcorrespondingauthor{Baljinnyam Dayan}{baljinnyam.dayan25@imperial.ac.uk}
+    % CID: 06059151
+    \icmlkeywords{wildfire prediction, conformal risk control, safety-critical machine learning, uncertainty quantification}
+    \vskip 0.3in
 ]
+\printAffiliationsAndNotice{}
 
 %% ============================================================
 %% ABSTRACT
 %% ============================================================
 
 \begin{abstract}
-Every wildfire prediction model deployed today shares a dangerous property: none of these methods provides formal guarantees on how much fire spread is missed.
-Despite extensive work on wildfire spread prediction using deep learning, no prior study has applied distribution-free safety guarantees to this domain, leaving evacuation planners reliant on probability thresholds with no formal assurance.
-We address this gap by presenting, to our knowledge, the first application of conformal risk control (CRC) \citep{angelopoulos2022conformal} to wildfire spread prediction, providing finite-sample guarantees on false negative rate ($\mathrm{FNR} \le 0.05$).
-We expose a stark failure: across three model families of increasing complexity (tabular: LightGBM, AUROC 0.854; convolutional: Tiny U-Net, AUROC 0.969; and graph-based: Hybrid ResGNN-UNet, AUROC 0.964), standard thresholds capture only 7--72\% of true fire spread.
-CRC eliminates this failure uniformly.
-Our central finding is that \emph{model architecture determines evacuation efficiency, while CRC determines safety}: both spatial models with CRC achieve ${\sim}95\%$ fire coverage while flagging only ${\sim}15\%$ of pixels, making them 4.2$\times$ more efficient than LightGBM, while the graph model's additional complexity over a simple U-Net yields no meaningful efficiency gain.
-We further propose a three-way CRC extension producing SAFE/MONITOR/EVACUATE zones for operational triage, and characterize a fundamental limitation of prevalence-weighted bounds under extreme class imbalance (${\sim}5\%$ fire prevalence).
-All models, calibration code, and evaluation pipelines are released for reproducibility.
+    Every wildfire prediction model deployed today shares a dangerous property: none of these methods provides formal guarantees on how much fire spread is missed.
+    Despite extensive work on wildfire spread prediction using deep learning, no prior study has applied distribution-free safety guarantees to this domain, leaving evacuation planners reliant on probability thresholds with no formal assurance.
+    We address this gap by presenting, to our knowledge, the first application of conformal risk control (CRC) \citep{angelopoulos2022conformal} to wildfire spread prediction, providing finite-sample guarantees on false negative rate ($\mathrm{FNR} \le 0.05$).
+    We expose a stark failure: across three model families of increasing complexity (tabular: LightGBM, AUROC 0.854; convolutional: Tiny U-Net, AUROC 0.969; and graph-based: Hybrid ResGNN-UNet, AUROC 0.964), standard thresholds capture only 7--72\% of true fire spread.
+    CRC eliminates this failure uniformly.
+    Our central finding is that \emph{model architecture determines evacuation efficiency, while CRC determines safety}: both spatial models with CRC achieve ${\sim}95\%$ fire coverage while flagging only ${\sim}15\%$ of pixels of total map, making them 4.2$\times$ more efficient than LightGBM, while the graph model's additional complexity over a simple U-Net yields no meaningful efficiency gain.
+    We propose a shift-aware three-way CRC framework that assigns SAFE/MONITOR/EVACUATE zones for operational triage, and characterize a fundamental limitation of prevalence-weighted bounds under extreme class imbalance (${\sim}5\%$ fire prevalence).
+    All models, calibration code, and evaluation pipelines are released for reproducibility.
 \end{abstract}
 
 %% ============================================================
@@ -79,18 +99,18 @@ At their respective optimal thresholds, LightGBM misses 92.8\% of fires, U-Net m
 With CRC, all three models achieve ${\ge}94\%$ coverage, but spatial models flag only ${\sim}15\%$ of pixels compared to LightGBM's 62.6\%, confirming that spatial inductive bias drives efficiency under the same safety guarantee.
 
 \begin{figure*}[t]
-\centering
-\includegraphics[width=0.85\textwidth]{probability_cross_section.pdf}
-\caption{Why standard thresholds fail.  A cross-section through a U-Net fire prediction shows probability peaking at ${\sim}0.8$ and decaying smoothly.  The standard threshold ($\hat{p} \ge 0.5$, gray) misses the majority of the fire region; the CRC threshold ($\hat{\lambda} = 0.002$, green) captures it entirely.}
-\label{fig:cross-section}
+    \centering
+    \includegraphics[width=0.85\textwidth]{probability_cross_section.pdf}
+    \caption{Why standard thresholds fail.  A cross-section through a U-Net fire prediction shows probability peaking at ${\sim}0.8$ and decaying smoothly.  The standard threshold ($\hat{p} \ge 0.5$, gray) misses the majority of the fire region; the CRC threshold ($\hat{\lambda} = 0.002$, green) captures it entirely.}
+    \label{fig:cross-section}
 \end{figure*}
 
 \paragraph{Contributions.}
 \begin{itemize}
-\item We demonstrate that standard probability thresholding is \emph{fundamentally inadequate} for wildfire evacuation across three model families, with fire coverage ranging from 7\% to 72\%.
-\item We show that CRC provides guaranteed ${\ge}95\%$ fire coverage regardless of model quality, and that architecture determines \emph{efficiency} (evacuation zone size), with spatial models achieving 4.2$\times$ tighter zones than tabular baselines under the same safety guarantee.
-\item We propose a three-way CRC extension with SAFE/MONITOR/EVACUATE zones and characterize its behavior under extreme class imbalance, identifying a fundamental limitation of prevalence-weighted bounds when $\pi_0 \gg \pi_1$.
-\item We provide a complete, reproducible pipeline with deterministic splits and open-source code for all experimental phases.\footnote{\url{https://github.com/baljinnyamday/wildfire-evacuation-crc}}
+    \item We demonstrate that standard probability thresholding is \emph{fundamentally inadequate} for wildfire evacuation across three model families, with fire coverage ranging from 7\% to 72\%.
+    \item We show that CRC provides guaranteed ${\ge}95\%$ fire coverage regardless of model quality, and that architecture determines \emph{efficiency} (evacuation zone size), with spatial models achieving 4.2$\times$ tighter zones than tabular baselines under the same safety guarantee.
+    \item We propose shift-aware three-way CRC with SAFE/MONITOR/EVACUATE zones and characterize its behavior under extreme class imbalance, identifying a fundamental limitation of prevalence-weighted bounds when $\pi_0 \gg \pi_1$.
+    \item We provide a complete, reproducible pipeline with deterministic splits and open-source code for all experimental phases.\footnote{\url{https://github.com/baljinnyamday/wildfire-evacuation-crc}}
 \end{itemize}
 
 %% ============================================================
@@ -126,7 +146,7 @@ Our work shows that even well-calibrated models remain unsafe under standard thr
 In safety-critical domains such as medical diagnosis and autonomous systems, the cost of false negatives far exceeds that of false positives, motivating methods that provide formal guarantees rather than empirical performance alone.
 Wildfire evacuation exemplifies this asymmetry more starkly than most domains: a missed fire pixel risks lives, while an over-broad perimeter causes cascading logistical failures in transportation networks \citep{zhao2022evacuation}.
 Yet this is precisely the domain where formal safety guarantees have been absent.
-Our work closes this gap: we demonstrate that the difference between standard thresholds and CRC-calibrated thresholds corresponds to a 42--88 percentage-point improvement in fire detection rate.
+Our work closes this gap: we demonstrate that the difference between standard thresholds and CRC-calibrated thresholds corresponds to a 23--87 percentage-point improvement in fire detection rate.
 
 %% ============================================================
 %% 3. PRELIMINARIES
@@ -141,12 +161,12 @@ We consider pixel-level binary classification for wildfire spread prediction.
 Given an input sample $x \in \mathbb{R}^{H \times W \times C}$ (in our setting, $H{=}W{=}64$, $C{=}12$) and binary fire mask $y \in \{0,1\}^{H \times W}$, a model $f_\theta$ outputs per-pixel probability estimates $\hat{p}_{ij} = f_\theta(x)_{ij} \in [0,1]$.
 Binary predictions are obtained by thresholding:
 \begin{equation}
-\hat{y}_{ij}(\lambda) = \mathbb{1}\{\hat{p}_{ij} \ge \lambda\}.
+    \hat{y}_{ij}(\lambda) = \mathbb{1}\{\hat{p}_{ij} \ge \lambda\}.
 \end{equation}
 Our primary safety objective is to control the false negative rate:
 \begin{equation}
-\mathrm{FNR}(\lambda) = \frac{\sum_{ij} y_{ij}(1 - \hat{y}_{ij}(\lambda))}{\sum_{ij} y_{ij}} \le \alpha, \quad \alpha = 0.05,
-\label{eq:fnr}
+    \mathrm{FNR}(\lambda) = \frac{\sum_{ij} y_{ij}(1 - \hat{y}_{ij}(\lambda))}{\sum_{ij} y_{ij}} \le \alpha, \quad \alpha = 0.05,
+    \label{eq:fnr}
 \end{equation}
 equivalently requiring empirical fire coverage $1 - \mathrm{FNR} \ge 95\%$.
 
@@ -156,15 +176,15 @@ equivalently requiring empirical fire coverage $1 - \mathrm{FNR} \ge 95\%$.
 CRC \citep{angelopoulos2022conformal} provides a principled method for selecting $\lambda$ with finite-sample guarantees.
 Given calibration examples $\{(x_i, y_i)\}_{i=1}^{n}$ drawn exchangeably with the test data, let $m$ denote the number of positive (fire) calibration pixels and $p_{(1)} \le \cdots \le p_{(m)}$ their sorted predicted probabilities.  CRC selects:
 \begin{equation}
-\hat{\lambda} = p_{(\lceil \alpha\,(m+1) \rceil)},
-\label{eq:crc}
+    \hat{\lambda} = p_{(\lceil \alpha\,(m+1) \rceil)},
+    \label{eq:crc}
 \end{equation}
 the $\alpha$-quantile of positive-pixel probabilities with finite-sample correction.
 At threshold $\hat{\lambda}$, at most $\lceil \alpha(m{+}1) \rceil - 1$ positive pixels fall below it, controlling the empirical FNR $\le \alpha$.
 The resulting guarantee is:
 \begin{equation}
-\mathbb{E}[\mathrm{FNR}(\hat{\lambda})] \le \alpha,
-\label{eq:guarantee}
+    \mathbb{E}[\mathrm{FNR}(\hat{\lambda})] \le \alpha,
+    \label{eq:guarantee}
 \end{equation}
 which holds \emph{regardless} of the model's quality, calibration, or architecture, requiring only exchangeability of calibration and test data.
 
@@ -179,13 +199,13 @@ A key insight motivating our study is that CRC \emph{decouples} safety from effi
 A model with strong fire/no-fire separation allows CRC to set a higher $\hat{\lambda}$, flagging fewer pixels while maintaining the same safety guarantee.
 A poorly separating model forces $\hat{\lambda}$ toward zero, expanding the evacuation zone.
 Thus, the model determines efficiency; CRC determines safety.
-\Cref{fig:fnr-sweep} illustrates this: the U-Net maintains safe FNR over a much wider threshold range than LightGBM, explaining the large difference in evacuation zone size when both are wrapped in CRC.
+\Cref{fig:fnr-sweep} illustrates this: both spatial models maintain safe FNR over a much wider threshold range than LightGBM, explaining the large difference in evacuation zone size when all three are wrapped in CRC.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{fnr_sweep.pdf}
-\caption{FNR as a function of decision threshold for LightGBM and U-Net.  The red dashed line marks $\alpha = 0.05$.  The U-Net maintains safe FNR over a much wider threshold range, explaining its 4.2$\times$ smaller evacuation zones under CRC.  Vertical lines mark $\hat{\lambda}$.}
-\label{fig:fnr-sweep}
+    \centering
+    \includegraphics[width=\columnwidth]{fnr_sweep.pdf}
+    \caption{FNR as a function of decision threshold for all three models.  The red dashed line marks $\alpha = 0.05$.  Both spatial models maintain safe FNR over a much wider threshold range than LightGBM, explaining their 4.2$\times$ smaller evacuation zones under CRC.  The near-overlapping U-Net and ResGNN-UNet curves illustrate diminishing returns from architectural complexity.  Markers show each model's CRC $\hat{\lambda}$.}
+    \label{fig:fnr-sweep}
 \end{figure}
 
 %% ============================================================
@@ -198,11 +218,39 @@ We train three architectures of increasing complexity on the same dataset and sp
 
 \subsection{Data}
 
-We use the NDWS dataset \citep{huot2022next, ndwsdataset}: 18,545 samples of $64{\times}64$ patches with 12 input channels (elevation, weather, vegetation indices, population density, previous fire mask) and a binary fire target.
+We use the NDWS dataset \citep{huot2022next, ndwsdataset}: 18,545 samples of $64{\times}64$ patches with 12 input channels and a binary fire target (\Cref{tab:features}).
 We enforce a deterministic split (seed 42): \textbf{train} 12,981 (70\%), \textbf{calibration} 2,781 (15\%), \textbf{test} 2,783 (15\%).
 The calibration set is never used during model training.
 Fire targets include no-data pixels ($-1$); we construct valid-pixel masks and apply masked loss and evaluation throughout.
 Only ${\sim}5\%$ of valid pixels are labeled fire, creating extreme class imbalance with profound implications for threshold selection (\Cref{sec:results}).
+
+\begin{table}[t]
+    \caption{NDWS input features (12 channels per $64{\times}64$ pixel patch).  All features are from remote-sensing and reanalysis sources \citep{huot2022next}.}
+    \label{tab:features}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{llll}
+        \toprule
+        Category     & Feature      & Variable             & Unit                      \\
+        \midrule
+        Topography   & elevation    & Terrain height       & m                         \\
+        \midrule
+        Weather      & th           & Wind direction       & $^\circ$                  \\
+                     & vs           & Wind speed           & m/s                       \\
+                     & tmmn         & Min temperature      & K                         \\
+                     & tmmx         & Max temperature      & K                         \\
+                     & sph          & Specific humidity    & kg/kg                     \\
+                     & pr           & Precipitation        & mm                        \\
+        \midrule
+        Drought      & pdsi         & Palmer Drought Index & ---                       \\
+        Fire weather & erc          & Energy Release Comp. & ---                       \\
+        Vegetation   & NDVI         & Vegetation index     & $[-1,1]$                  \\
+        Demographics & population   & Population density   & ppl/km\textsuperscript{2} \\
+        Prior state  & PrevFireMask & Previous fire mask   & $\{0,1\}$                 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \subsection{Model 1: Tabular Baseline (LightGBM)}
 
@@ -236,19 +284,27 @@ This threshold is applied unchanged to the test set.
 \subsection{Three-Way CRC Extension}
 \label{sec:threeway}
 
-We extend standard CRC to a three-way decision framework that routes each pixel to one of three actions:
+We adapt shift-aware CRC to wildfire evacuation, routing each pixel to one of three actions:
 \begin{equation}
-\begin{aligned}
-\text{SAFE} \; &:\; \hat{p} < \lambda_{\min}, \\
-\text{MONITOR} \; &:\; \lambda_{\min} \le \hat{p} < \lambda_{\max}, \\
-\text{EVACUATE} \; &:\; \hat{p} \ge \lambda_{\max}.
-\end{aligned}
+    \begin{aligned}
+        \text{SAFE} \;     & :\; \hat{p} < \lambda_{\min},                    \\
+        \text{MONITOR} \;  & :\; \lambda_{\min} \le \hat{p} < \lambda_{\max}, \\
+        \text{EVACUATE} \; & :\; \hat{p} \ge \lambda_{\max}.
+    \end{aligned}
 \end{equation}
-The MONITOR zone captures epistemic uncertainty and routes ambiguous pixels to human review, rather than forcing a binary automated decision.
+The MONITOR zone routes uncertain pixels to human review rather than forcing a binary automated decision.
+We use cost-weighted CRC with $c_{\mathrm{fn}}{=}5$, $c_{\mathrm{fp}}{=}1$ \citep{zhao2022evacuation} and cost-weighted risk level $\alpha_{\mathrm{cw}}{=}0.50$ (cost-weighting with ${\sim}95\%$ non-fire pixels shifts the risk scale relative to the binary FNR target).
 
-Threshold selection uses asymmetric cost penalties ($c_{\mathrm{fn}}{=}5$, $c_{\mathrm{fp}}{=}1$), reflecting the operational reality that a missed fire pixel risks lives whereas an over-broad perimeter causes logistical disruption but not direct harm \citep{zhao2022evacuation}.
-The shift interval $\rho \in [0.9, 1.1]$ accounts for mild prevalence variation between calibration and deployment seasons; wider intervals (e.g., $[0.5, 2.0]$) cause the safety correction to exceed $\alpha$, making calibration infeasible under ${\sim}5\%$ fire prevalence.
-The prevalence-weighted bound $B_{\mathrm{pw}} = \max(c_{\mathrm{fn}} \pi_1, c_{\mathrm{fp}} \pi_0)$ governs the width of the MONITOR zone, where $\pi_1$ and $\pi_0$ are the fire and non-fire prevalences.
+To account for seasonal prevalence variation, we specify a shift interval $[\rho_{\mathrm{lo}}, \rho_{\mathrm{hi}}] = [0.9, 1.1]$ on the prevalence ratio $\rho = \pi_1^{\mathrm{dep}} / \pi_1^{\mathrm{cal}}$.
+The adjusted calibration level is:
+\begin{align}
+    \epsilon_{\max}        & = B_{\mathrm{pw}} \cdot \max\!\bigl(\lVert \boldsymbol{\delta}_{\rho_{\mathrm{lo}}} \rVert_1,\, \lVert \boldsymbol{\delta}_{\rho_{\mathrm{hi}}} \rVert_1\bigr) + \tfrac{B_{\mathrm{pw}}}{N{+}1}, \label{eq:eps-max} \\
+    \alpha_{\mathrm{safe}} & = \alpha_{\mathrm{cw}} - \epsilon_{\max}, \label{eq:alpha-safe}
+\end{align}
+where $B_{\mathrm{pw}} = \max(c_{\mathrm{fn}} \pi_1,\, c_{\mathrm{fp}} \pi_0)$ is the prevalence-weighted bound and $\boldsymbol{\delta}_\rho$ the importance weight mismatch at shift $\rho$.
+A base threshold $\hat{\lambda}$ is found via cost-weighted CRC at level $\alpha_{\mathrm{safe}}$, then shifted proportionally to the endpoint weight mismatches to produce $\lambda_{\min}$ and $\lambda_{\max}$ (Algorithm~\ref{alg:threeway}).
+On the decided set, $\mathbb{E}[\ell \mid \mathrm{decided}] \le \alpha_{\mathrm{cw}} / (1 - d)$, where $d$ is the MONITOR fraction.
+If $\alpha_{\mathrm{safe}} \le 0$, the interval is too wide for safe calibration.
 
 %% ============================================================
 %% 5. EXPERIMENTS
@@ -274,29 +330,29 @@ Our \emph{primary} metrics are:
 \subsection{Main Results}
 
 \begin{table}[t]
-\caption{Test-set results across three models and three decision frameworks.  CRC targets $\mathrm{FNR} \le 0.05$.  Three-way CRC uses $c_{\mathrm{fn}}{=}5$, $c_{\mathrm{fp}}{=}1$, $\rho \in [0.9, 1.1]$.  All models trained from scratch on identical 70/15/15 splits.  Values show $\pm$ 95\% bootstrap CI (10K image resamples).}
-\label{tab:main-results}
-\centering
-\footnotesize
-\setlength{\tabcolsep}{2.5pt}
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lcccccr}
-\toprule
-Method & Params & $\hat{\lambda}$ & Cov.$\uparrow$ & FNR$\downarrow$ & Set$\downarrow$ & AUC$\uparrow$ \\
-\midrule
-LGBM ($p{\ge}.5$) & --- & .500 & .072{\tiny$\pm$.02} & .928{\tiny$\pm$.02} & .001 & .854 \\
-LGBM+CRC & --- & .003 & .941{\tiny$\pm$.01} & .059{\tiny$\pm$.01} & .626{\tiny$\pm$.01} & .854 \\
-LGBM+3way & --- & {\scriptsize[0,.03]} & 1.00 & .000 & .040 & .854 \\
-\midrule
-UNet ($p{\ge}.5$) & 470K & .500 & .390{\tiny$\pm$.02} & .610{\tiny$\pm$.02} & .007 & .969 \\
-\textbf{UNet+CRC} & \textbf{470K} & \textbf{.002} & \textbf{.947}{\tiny$\pm$.01} & \textbf{.053}{\tiny$\pm$.01} & \textbf{.149}{\tiny$\pm$.01} & \textbf{.969} \\
-UNet+3way & 470K & {\scriptsize[0,.02]} & 1.00 & .000 & .051 & .969 \\
-\midrule
-ResGNN ($p{\ge}.5$) & 229K & .500 & .715{\tiny$\pm$.02} & .285{\tiny$\pm$.02} & .031{\tiny$\pm$.00} & .964 \\
-ResGNN+CRC & 229K & .022 & .948{\tiny$\pm$.01} & .052{\tiny$\pm$.01} & .151{\tiny$\pm$.01} & .964 \\
-ResGNN+3way & 229K & {\scriptsize[0,.02]} & 1.00 & .000 & .149 & .964 \\
-\bottomrule
-\end{tabular}}
+    \caption{Test-set results across three models and three decision frameworks.  CRC targets $\mathrm{FNR} \le 0.05$.  Three-way CRC uses cost-weighted $\alpha_{\mathrm{cw}}{=}0.50$, $c_{\mathrm{fn}}{=}5$, $c_{\mathrm{fp}}{=}1$, $\rho \in [0.9, 1.1]$.  All models trained from scratch on identical 70/15/15 splits.  Values show $\pm$ 95\% bootstrap CI (10K image resamples).}
+    \label{tab:main-results}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{2.5pt}
+    \resizebox{\columnwidth}{!}{%
+        \begin{tabular}{lcccccr}
+            \toprule
+            Method              & Params        & $\hat{\lambda}$      & Cov.$\uparrow$               & FNR$\downarrow$              & Set$\downarrow$              & AUC$\uparrow$ \\
+            \midrule
+            LGBM ($p{\ge}.5$)   & ---           & .500                 & .072{\tiny$\pm$.02}          & .928{\tiny$\pm$.02}          & .001                         & .854          \\
+            LGBM+CRC            & ---           & .003                 & .941{\tiny$\pm$.01}          & .059{\tiny$\pm$.01}          & .626{\tiny$\pm$.01}          & .854          \\
+            LGBM+3way           & ---           & {\scriptsize[0,.03]} & 1.00                         & .000                         & .040                         & .854          \\
+            \midrule
+            UNet ($p{\ge}.5$)   & 470K          & .500                 & .390{\tiny$\pm$.02}          & .610{\tiny$\pm$.02}          & .007                         & .969          \\
+            \textbf{UNet+CRC}   & \textbf{470K} & \textbf{.002}        & \textbf{.947}{\tiny$\pm$.01} & \textbf{.053}{\tiny$\pm$.01} & \textbf{.149}{\tiny$\pm$.01} & \textbf{.969} \\
+            UNet+3way           & 470K          & {\scriptsize[0,.02]} & 1.00                         & .000                         & .051                         & .969          \\
+            \midrule
+            ResGNN ($p{\ge}.5$) & 229K          & .500                 & .715{\tiny$\pm$.02}          & .285{\tiny$\pm$.02}          & .031{\tiny$\pm$.00}          & .964          \\
+            ResGNN+CRC          & 229K          & .022                 & .948{\tiny$\pm$.01}          & .052{\tiny$\pm$.01}          & .151{\tiny$\pm$.01}          & .964          \\
+            ResGNN+3way         & 229K          & {\scriptsize[0,.02]} & 1.00                         & .000                         & .149                         & .964          \\
+            \bottomrule
+        \end{tabular}}
 \end{table}
 
 \Cref{tab:main-results} reveals four key findings.
@@ -324,17 +380,17 @@ The U-Net produces smooth probability gradients where fire risk decays with dist
 The CRC threshold ($\hat{\lambda} = 0.002$) captures the entire ``tail'' of low-probability but real fire pixels that conventional thresholds miss, yielding an interpretable risk map where the CRC boundary defines the guaranteed-safe evacuation zone (\Cref{fig:deep-dive}).
 
 \begin{figure*}[t]
-\centering
-\includegraphics[width=0.85\textwidth]{crc_deep_dive.pdf}
-\caption{Same U-Net, different thresholds.  Standard thresholding ($\hat{p} \ge 0.5$) catches 56\% of fires; CRC ($\hat{\lambda} = 0.002$) catches 100\%.  Bottom: probability cross-section showing how CRC captures low-probability fire pixels.  Green shading marks pixels saved by CRC.}
-\label{fig:deep-dive}
+    \centering
+    \includegraphics[width=0.85\textwidth]{crc_deep_dive.pdf}
+    \caption{Same U-Net, different thresholds.  Standard thresholding ($\hat{p} \ge 0.5$) catches 56\% of fires; CRC ($\hat{\lambda} = 0.002$) catches 100\%.  Bottom: probability cross-section showing how CRC captures low-probability fire pixels.  Green shading marks pixels saved by CRC.}
+    \label{fig:deep-dive}
 \end{figure*}
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{three_model_comparison.pdf}
-\caption{Three-model comparison.  \textbf{Left:} AUROC.  \textbf{Center:} without CRC, no model reaches 95\% coverage.  \textbf{Right:} with CRC, both meet the safety target; U-Net achieves 4.2$\times$ smaller evacuation zones.}
-\label{fig:three-model}
+    \centering
+    \includegraphics[width=\columnwidth]{three_model_comparison.pdf}
+    \caption{Three-model comparison.  \textbf{Left:} AUROC.  \textbf{Center:} without CRC, no model reaches 95\% coverage.  \textbf{Right:} with CRC, all three meet the safety target; both spatial models achieve ${\sim}4\times$ smaller evacuation zones than LightGBM.}
+    \label{fig:three-model}
 \end{figure}
 
 \subsection{Before and After CRC}
@@ -344,10 +400,10 @@ Without CRC, the standard threshold produces predominantly red error maps with v
 With CRC ($\hat{\lambda} = 0.002$), the maps turn green (correctly detected) with some blue (over-alerts), and the three-way CRC provides an interpretable MONITOR/EVACUATE policy.
 
 \begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{before_after_crc.pdf}
-\caption{The safety gap across three test samples (0.5\%, 2.7\%, 7.8\% fire).  \textbf{Col.\,1:} ground truth.  \textbf{Col.\,2:} standard threshold, with missed fire in red (100\%, 73\%, 34\% missed).  \textbf{Col.\,3:} CRC threshold, with improved detection (green).  \textbf{Col.\,4:} three-way zones (SAFE/MONITOR/EVACUATE).}
-\label{fig:before-after}
+    \centering
+    \includegraphics[width=\textwidth]{before_after_crc.pdf}
+    \caption{The safety gap across three test samples (0.5\%, 2.7\%, 7.8\% fire).  \textbf{Col.\,1:} ground truth.  \textbf{Col.\,2:} standard threshold, with missed fire in red (100\%, 73\%, 34\% missed).  \textbf{Col.\,3:} CRC threshold, with improved detection (green).  \textbf{Col.\,4:} three-way zones (SAFE/MONITOR/EVACUATE).}
+    \label{fig:before-after}
 \end{figure*}
 
 \subsection{Risk Gradient Analysis}
@@ -357,35 +413,36 @@ Rather than binary predictions, the U-Net produces a continuous risk gradient wh
 The CRC threshold contour and the EVACUATE boundary provide principled decision surfaces overlaid on this risk field.
 
 \begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{risk_gradient_map.pdf}
-\caption{Per-pixel fire risk gradient.  \textbf{Col.\,1:} ground truth.  \textbf{Col.\,2:} continuous probability heatmap.  \textbf{Col.\,3:} probability bands with CRC contour (green dashed) and EVACUATE boundary (red).  \textbf{Col.\,4:} calibrated risk gradient for operational mapping.}
-\label{fig:risk-gradient}
+    \centering
+    \includegraphics[width=\textwidth]{risk_gradient_map.pdf}
+    \caption{Per-pixel fire risk gradient.  \textbf{Col.\,1:} ground truth.  \textbf{Col.\,2:} continuous probability heatmap.  \textbf{Col.\,3:} probability bands with CRC contour (green dashed) and EVACUATE boundary (red).  \textbf{Col.\,4:} calibrated risk gradient for operational mapping.}
+    \label{fig:risk-gradient}
 \end{figure*}
 
 \subsection{Three-Way Zone Analysis}
 \label{sec:threeway-results}
 
 \begin{table}[t]
-\caption{Three-way zone fractions on the test set.  The SAFE zone collapses because $B_{\mathrm{pw}} = \max(c_{\mathrm{fn}} \pi_1, c_{\mathrm{fp}} \pi_0) = 0.95$ is dominated by $c_{\mathrm{fp}} \pi_0$ under ${\sim}5\%$ fire prevalence.}
-\label{tab:threeway-zones}
-\centering
-\footnotesize
-\begin{tabular}{lcccc}
-\toprule
-Model & SAFE & MONITOR & EVACUATE & $B_{\mathrm{pw}}$ \\
-\midrule
-LightGBM & 0.0\% & 95.96\% & 4.04\% & 0.988 \\
-U-Net & 0.0\% & 94.90\% & 5.10\% & 0.987 \\
-\bottomrule
-\end{tabular}
+    \caption{Three-way zone fractions on the test set.  The SAFE zone collapses because $B_{\mathrm{pw}} = \max(c_{\mathrm{fn}} \pi_1, c_{\mathrm{fp}} \pi_0) = 0.95$ is dominated by $c_{\mathrm{fp}} \pi_0$ under ${\sim}5\%$ fire prevalence.}
+    \label{tab:threeway-zones}
+    \centering
+    \footnotesize
+    \begin{tabular}{lcccc}
+        \toprule
+        Model       & SAFE  & MONITOR & EVACUATE & $B_{\mathrm{pw}}$ \\
+        \midrule
+        LightGBM    & 0.0\% & 95.96\% & 4.04\%   & 0.988             \\
+        U-Net       & 0.0\% & 94.90\% & 5.10\%   & 0.987             \\
+        ResGNN-UNet & 0.0\% & 85.15\% & 14.85\%  & 0.987             \\
+        \bottomrule
+    \end{tabular}
 \end{table}
 
 \Cref{tab:threeway-zones} shows the zone breakdown.
-Three-way CRC achieves 100\% coverage with small EVACUATE zones (4--5\%), but the SAFE zone collapses entirely ($\lambda_{\min} = 0$).
+Three-way CRC achieves 100\% coverage with compact EVACUATE zones (4--15\%), but the SAFE zone collapses entirely ($\lambda_{\min} = 0$).
 With ${\sim}5\%$ fire prevalence:
 \[
-B_{\mathrm{pw}} = \max(5 \times 0.05,\; 1 \times 0.95) = 0.95,
+    B_{\mathrm{pw}} = \max(5 \times 0.05,\; 1 \times 0.95) = 0.95,
 \]
 dominated by the majority-class term $c_{\mathrm{fp}} \pi_0$.
 The resulting shift correction exceeds the base CRC threshold (${\sim}0.003$), pushing $\lambda_{\min}$ below zero and producing a maximally conservative policy: all non-evacuated pixels are routed to human review.
@@ -394,21 +451,21 @@ This reveals a fundamental limitation of the prevalence-weighted bound in rare-e
 \subsection{Training Details}
 
 \begin{table}[t]
-\caption{Model training summary.  All models trained from scratch on identical NDWS splits.}
-\label{tab:training}
-\centering
-\footnotesize
-\setlength{\tabcolsep}{2.5pt}
-\begin{tabular}{lccccr}
-\toprule
-Model & Params & Epochs & Optim & Val Loss & AUC \\
-\midrule
-LightGBM & --- & 100 iter & GBM & --- & .854 \\
-Tiny U-Net & 470K & 50 & AdamW & 0.048 & .969 \\
-ResGNN-UNet & 229K & 23\textsuperscript{$\dagger$} & AdamW & 0.131 & .964 \\
-\bottomrule
-\multicolumn{6}{l}{\scriptsize $\dagger$Early-stopped from 30 (patience=7, best epoch 16).}
-\end{tabular}
+    \caption{Model training summary.  All models trained from scratch on identical NDWS splits.}
+    \label{tab:training}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{2.5pt}
+    \begin{tabular}{lccccr}
+        \toprule
+        Model       & Params & Epochs                        & Optim & Val Loss & AUC  \\
+        \midrule
+        LightGBM    & ---    & 100 iter                      & GBM   & ---      & .854 \\
+        Tiny U-Net  & 470K   & 50                            & AdamW & 0.048    & .969 \\
+        ResGNN-UNet & 229K   & 23\textsuperscript{$\dagger$} & AdamW & 0.131    & .964 \\
+        \bottomrule
+        \multicolumn{6}{l}{\scriptsize $\dagger$Early-stopped from 30 (patience=7, best epoch 16).}
+    \end{tabular}
 \end{table}
 
 \Cref{tab:training} summarizes the training investment.
@@ -417,10 +474,10 @@ The ResGNN-UNet early-stopped at epoch 23 (best epoch 16, val loss 0.131), train
 \Cref{fig:training} shows the U-Net's smooth convergence with minimal overfitting.
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{training_curves.pdf}
-\caption{Tiny U-Net training curves: BCE loss and cosine annealing LR over 50 epochs.  Smooth convergence with minimal train--val gap.}
-\label{fig:training}
+    \centering
+    \includegraphics[width=\columnwidth]{training_curves.pdf}
+    \caption{Tiny U-Net training curves: BCE loss and cosine annealing LR over 50 epochs.  Smooth convergence with minimal train--val gap.}
+    \label{fig:training}
 \end{figure}
 
 %% ============================================================
@@ -486,19 +543,20 @@ Evaluating CRC robustness under realistic temporal shift is critical for any ope
 We have demonstrated that conformal risk control transforms wildfire spread prediction from an accuracy-optimization problem into a safety-guaranteed decision system.
 Across three model families, our experiments establish that:
 \begin{enumerate}
-\item \textbf{No model is safe without CRC.}  Standard thresholding captures only 7--52\% of fires.
-\item \textbf{CRC guarantees safety regardless of model.}  Both calibrated models achieve ${\ge}94\%$ coverage on held-out data.
-\item \textbf{Model quality determines efficiency, not safety.}  The Tiny U-Net achieves 4.2$\times$ tighter evacuation zones than LightGBM under the same CRC guarantee.
-\item \textbf{Complexity without separation is waste.}  A graph-augmented model underperforms a standard U-Net in AUROC despite its more complex architecture.
+    \item \textbf{No model is safe without CRC.}  Standard thresholding captures only 7--72\% of fires.
+    \item \textbf{CRC guarantees safety regardless of model.}  All three calibrated models achieve ${\ge}94\%$ coverage on held-out data.
+    \item \textbf{Model quality determines efficiency, not safety.}  The Tiny U-Net achieves 4.2$\times$ tighter evacuation zones than LightGBM under the same CRC guarantee.
+    \item \textbf{Complexity without separation is waste.}  A graph-augmented model underperforms a standard U-Net in AUROC despite its more complex architecture.
 \end{enumerate}
 
 For practitioners: a well-trained simple model wrapped in CRC provides both stronger safety guarantees and tighter evacuation zones than a complex model evaluated on F1 alone.
 The few lines of conformal calibration code deliver what no amount of architectural sophistication can: a mathematical guarantee that ${\ge}95\%$ of fires will be detected.
 
 \section*{Impact Statement}
-This work targets safer wildfire evacuation decision support by explicitly controlling false negatives.
-Potential positive impact includes better risk-aware public safety planning.
-Potential negative impact includes over-reliance on automated recommendations; we mitigate this through the three-way framework that routes uncertain pixels to human review.
+This work targets safer wildfire evacuation decision support by providing, for the first time, fire spread predictions with formal guarantees on missed detections (${\ge}95\%$ coverage, and 100\% under the three-way framework).
+If deployed operationally, such guarantees could transform how limited emergency resources are allocated: EVACUATE zones give firefighters, first responders, and military personnel a trusted map for immediate civilian evacuation and safe operational corridors, while MONITOR zones enable precautionary self-evacuation and resource pre-positioning in areas the model cannot yet confirm as safe.
+Rather than treating the entire landscape as equally dangerous, responders could concentrate assets where the model is certain and warn communities in uncertain regions to prepare---replacing blanket alerts with targeted, risk-proportionate action.
+Potential negative impact includes over-reliance on automated recommendations; we mitigate this through the three-way framework that explicitly routes uncertain pixels to human review rather than issuing a binary safe/unsafe judgment.
 
 \section*{Software and Data}
 All code, trained models, and evaluation pipelines are available at \url{https://github.com/baljinnyamday/wildfire-evacuation-crc}, with deterministic data splits (seed 42, 70/15/15) and CLI entry points for each phase.
@@ -519,24 +577,68 @@ The dataset is NDWS \citep{ndwsdataset}, subject to its original terms of use.
 \label{app:figures}
 
 \begin{figure}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{safety_efficiency.pdf}
-\caption{Safety vs.\ efficiency for all nine configurations.  \textbf{Top:} coverage (safety), where only CRC and three-way methods achieve ${\ge}95\%$.  \textbf{Bottom:} set size (efficiency), where both spatial models with CRC achieve the best trade-off.}
-\label{fig:safety-efficiency}
+    \centering
+    \includegraphics[width=0.85\textwidth]{safety_efficiency.pdf}
+    \caption{Safety vs.\ efficiency for all nine configurations.  \textbf{Top:} coverage (safety), where only CRC and three-way methods achieve ${\ge}95\%$.  \textbf{Bottom:} set size (efficiency), where both spatial models with CRC achieve the best trade-off.}
+    \label{fig:safety-efficiency}
 \end{figure}
 
 \begin{figure}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{bare_vs_crc_comparison.pdf}
-\caption{Bare model vs.\ CRC across four test samples.  Fire catch rate improves from 8\%$\to$98\%, 0\%$\to$83\%, 56\%$\to$100\%, 48\%$\to$100\%.}
-\label{fig:bare-vs-crc}
+    \centering
+    \includegraphics[width=0.85\textwidth]{bare_vs_crc_comparison.pdf}
+    \caption{Bare model vs.\ CRC across four test samples.  Fire catch rate improves from 8\%$\to$98\%, 0\%$\to$83\%, 56\%$\to$100\%, 48\%$\to$100\%.}
+    \label{fig:bare-vs-crc}
 \end{figure}
 
 \begin{figure}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{qualitative_maps.pdf}
-\caption{Qualitative prediction maps: ground truth, probabilities, standard prediction, CRC prediction, three-way zones, and error analysis.}
-\label{fig:qualitative}
+    \centering
+    \includegraphics[width=0.85\textwidth]{qualitative_maps.pdf}
+    \caption{Qualitative prediction maps: ground truth, probabilities, standard prediction, CRC prediction, three-way zones, and error analysis.}
+    \label{fig:qualitative}
 \end{figure}
+
+\section{Three-Way CRC Procedure}
+\label{app:threeway-algo}
+
+\begin{center}
+    \begin{minipage}{0.92\textwidth}
+        \begin{lstlisting}[style=pseudocode, title={\textbf{Algorithm 1}\; Three-Way CRC for Wildfire Evacuation}]
+def three_way_crc(scores, labels, $\alpha_{\mathrm{cw}}$, $c_{\mathrm{fn}}$, $c_{\mathrm{fp}}$, $\rho_{\mathrm{lo}}$, $\rho_{\mathrm{hi}}$):
+    # Prevalence and bound
+    $\pi_1$ = mean(labels)
+    $\pi_0$ = 1 - $\pi_1$
+    $B_{\mathrm{pw}}$ = max($c_{\mathrm{fn}} \cdot \pi_1$, $c_{\mathrm{fp}} \cdot \pi_0$)
+
+    # Importance weight mismatch at each shift endpoint
+    for $\rho$ in {$\rho_{\mathrm{lo}}$, $\rho_{\mathrm{hi}}$}:
+        $w_1(\rho)$ = ($\rho \pi_1$) / ($\rho \pi_1 + \pi_0$) / $\pi_1$
+        $w_0(\rho)$ = $\pi_0$ / ($\rho \pi_1 + \pi_0$) / $\pi_0$
+        $\lVert \boldsymbol{\delta}_\rho \rVert_1$ = $|w_1(\rho) - 1|$ + $|w_0(\rho) - 1|$
+
+    # Shift-aware recalibration
+    $\epsilon_{\mathrm{max}}$ = $B_{\mathrm{pw}}$ $\cdot$ max($\lVert \boldsymbol{\delta}_{\rho_{\mathrm{lo}}} \rVert_1$, $\lVert \boldsymbol{\delta}_{\rho_{\mathrm{hi}}} \rVert_1$) + $B_{\mathrm{pw}}$/(N+1)
+    $\alpha_{\mathrm{safe}}$ = $\alpha_{\mathrm{cw}}$ - $\epsilon_{\mathrm{max}}$
+    if $\alpha_{\mathrm{safe}}$ $\le$ 0:
+        return INFEASIBLE          # shift interval too wide
+
+    # Base threshold and zone boundaries
+    $\hat{\lambda}$ = cost_weighted_crc(scores, labels, $\alpha_{\mathrm{safe}}$)
+    s = $B_{\mathrm{pw}}$ / max($c_{\mathrm{fn}}$, $c_{\mathrm{fp}}$)   # shift scale
+    $\lambda_{\mathrm{min}}$ = max(0, $\hat{\lambda}$ - s $\cdot$ $\lVert \boldsymbol{\delta}_{\rho_{\mathrm{lo}}} \rVert_1$)
+    $\lambda_{\mathrm{max}}$ = min(1, $\hat{\lambda}$ + s $\cdot$ $\lVert \boldsymbol{\delta}_{\rho_{\mathrm{hi}}} \rVert_1$)
+
+    # Decision rule
+    return $\lambda_{\mathrm{min}}$, $\lambda_{\mathrm{max}}$
+    # SAFE if $\hat{p} < \lambda_{\mathrm{min}}$
+    # MONITOR if $\lambda_{\mathrm{min}} \le \hat{p} < \lambda_{\mathrm{max}}$
+    # EVACUATE if $\hat{p} \ge \lambda_{\mathrm{max}}$
+\end{lstlisting}
+    \end{minipage}
+\end{center}
+\label{alg:threeway}
+
+Under ${\sim}5\%$ fire prevalence with $c_{\mathrm{fn}}{=}5$, $c_{\mathrm{fp}}{=}1$: $B_{\mathrm{pw}} = \max(0.25, 0.95) = 0.95$ and $s = 0.95/5 = 0.19$.
+With $\rho \in [0.9, 1.1]$, $\lVert \boldsymbol{\delta} \rVert_1 \approx 0.105$, giving a shift of ${\sim}0.02$.
+Since the base threshold $\hat{\lambda}$ is itself ${\sim}0.02$ (driven by extreme class imbalance), $\lambda_{\min}$ is pushed to zero---collapsing the SAFE zone entirely and routing all non-evacuated pixels to MONITOR (\Cref{tab:threeway-zones}).
 
 \end{document}

@@ -206,55 +206,18 @@ def plot_before_after_crc(
 
 def plot_three_model_comparison(results: dict, output_dir: Path, dpi: int) -> None:
     """Bar chart comparing all 3 models: LightGBM, U-Net, ResGNN-UNet."""
-    models = [
-        ("LightGBM", "#1f77b4"),
-        ("U-Net", "#ff7f0e"),
-        ("ResGNN-UNet", "#2ca02c"),
-    ]
+    model_names = ["LightGBM", "U-Net", "ResGNN-UNet"]
+    colors_bar = ["#1f77b4", "#ff7f0e", "#2ca02c"]
 
-    # Data: (model, method, coverage, set_size/fnr, auroc)
-    rows = []
+    # Pull all values from results — no hardcoding
+    aurocs = [results[f"{m}_standard"]["auroc"] for m in model_names]
+    coverages_std = [results[f"{m}_standard"]["coverage"] for m in model_names]
+    crc_coverages = [results[f"{m}_crc"]["coverage"] for m in model_names]
+    crc_set_sizes = [results[f"{m}_crc"]["set_size"] for m in model_names]
 
-    # From our evaluation results
-    for model_name, color in models[:2]:
-        for suffix, label in [("standard", "$p \\geq 0.5$"),
-                              ("crc", "+ CRC")]:
-            key = f"{model_name}_{suffix}"
-            if key in results:
-                rows.append({
-                    "model": model_name,
-                    "method": label,
-                    "coverage": results[key]["coverage"],
-                    "fnr": results[key]["fnr"],
-                    "set_size": results[key]["set_size"],
-                    "auroc": results[key]["auroc"],
-                    "color": color,
-                })
-
-    # ResGNN-UNet (from Kaggle notebook results, no CRC)
-    rows.append({
-        "model": "ResGNN-UNet",
-        "method": "$p \\geq 0.5$",
-        "coverage": 1 - 0.609613618650019,  # similar to U-Net standard FNR range
-        "fnr": 0.609613618650019,
-        "set_size": 0.00680163615544558,
-        "auroc": 0.951,
-        "color": "#2ca02c",
-    })
-    # Override with actual ResGNN-UNet results from their log
-    rows[-1]["coverage"] = 0.515  # recall at standard thresh=0.50
-    rows[-1]["fnr"] = 1 - 0.515
-    rows[-1]["set_size"] = 0.226
-    rows[-1]["auroc"] = 0.951
-
-    # Build the comparison figure
     fig, axes = plt.subplots(1, 3, figsize=(16, 5.5))
 
     # --- Panel 1: AUROC (model ranking quality) ---
-    model_names = ["LightGBM", "U-Net", "ResGNN-UNet"]
-    aurocs = [0.854, 0.969, 0.951]
-    colors_bar = ["#1f77b4", "#ff7f0e", "#2ca02c"]
-
     bars = axes[0].bar(model_names, aurocs, color=colors_bar, edgecolor="black",
                        linewidth=0.5, width=0.6)
     axes[0].set_ylabel("AUROC", fontsize=12)
@@ -266,7 +229,6 @@ def plot_three_model_comparison(results: dict, output_dir: Path, dpi: int) -> No
                      f"{val:.3f}", ha="center", va="bottom", fontsize=11, fontweight="bold")
 
     # --- Panel 2: Coverage at standard threshold (UNSAFE!) ---
-    coverages_std = [0.072, 0.390, 0.515]
     bars2 = axes[1].bar(model_names, coverages_std, color=colors_bar, edgecolor="black",
                         linewidth=0.5, width=0.6)
     axes[1].axhline(0.95, color="red", linestyle="--", linewidth=2, label="95% safety target")
@@ -280,25 +242,21 @@ def plot_three_model_comparison(results: dict, output_dir: Path, dpi: int) -> No
         axes[1].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
                      f"{val:.1%}", ha="center", va="bottom", fontsize=11, fontweight="bold")
 
-    # Big red X annotation
+    # UNSAFE annotation
     for bar in bars2:
         axes[1].text(bar.get_x() + bar.get_width() / 2, 0.97,
                      "UNSAFE", ha="center", va="bottom", fontsize=8,
                      color="red", fontweight="bold")
 
-    # --- Panel 3: With CRC — coverage + set size ---
-    # Only LightGBM and U-Net have CRC results
-    crc_models = ["LightGBM\n+ CRC", "U-Net\n+ CRC"]
-    crc_coverages = [0.941, 0.947]
-    crc_set_sizes = [0.626, 0.149]
-    crc_colors = ["#1f77b4", "#ff7f0e"]
+    # --- Panel 3: With CRC — coverage + set size (all 3 models) ---
+    crc_labels = [f"{m}\n+ CRC" for m in model_names]
 
-    x = np.arange(len(crc_models))
+    x = np.arange(len(crc_labels))
     width = 0.35
 
-    bars3a = axes[2].bar(x - width / 2, crc_coverages, width, color=crc_colors,
+    bars3a = axes[2].bar(x - width / 2, crc_coverages, width, color=colors_bar,
                          edgecolor="black", linewidth=0.5, label="Coverage", alpha=0.9)
-    bars3b = axes[2].bar(x + width / 2, crc_set_sizes, width, color=crc_colors,
+    bars3b = axes[2].bar(x + width / 2, crc_set_sizes, width, color=colors_bar,
                          edgecolor="black", linewidth=0.5, label="Set Size",
                          alpha=0.4, hatch="///")
 
@@ -307,7 +265,7 @@ def plot_three_model_comparison(results: dict, output_dir: Path, dpi: int) -> No
     axes[2].set_title("With CRC\n(guaranteed safe)", fontsize=13, fontweight="bold",
                       color="#27ae60")
     axes[2].set_xticks(x)
-    axes[2].set_xticklabels(crc_models, fontsize=10)
+    axes[2].set_xticklabels(crc_labels, fontsize=10)
     axes[2].set_ylim(0, 1.15)
     axes[2].legend(fontsize=9, loc="upper right")
     axes[2].grid(axis="y", alpha=0.3)
@@ -319,9 +277,12 @@ def plot_three_model_comparison(results: dict, output_dir: Path, dpi: int) -> No
         axes[2].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
                      f"{val:.1%}", ha="center", va="bottom", fontsize=10)
 
-    # 4.2× annotation
-    axes[2].annotate("4.2× smaller\nevacuation zone",
-                     xy=(1 + width / 2, 0.149), xytext=(1.5, 0.45),
+    # Efficiency annotation: compare LightGBM vs best spatial model
+    lgbm_set = crc_set_sizes[0]
+    best_spatial_set = min(crc_set_sizes[1], crc_set_sizes[2])
+    ratio = lgbm_set / best_spatial_set
+    axes[2].annotate(f"{ratio:.1f}× smaller\nevacuation zone",
+                     xy=(1 + width / 2, crc_set_sizes[1]), xytext=(2.2, 0.45),
                      fontsize=10, fontweight="bold", color="#27ae60",
                      arrowprops=dict(arrowstyle="->", color="#27ae60", lw=2),
                      ha="center")

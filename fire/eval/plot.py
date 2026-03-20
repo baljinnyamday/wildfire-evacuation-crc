@@ -28,6 +28,7 @@ import numpy as np
 COLORS = {
     "LightGBM": "#1f77b4",
     "U-Net": "#ff7f0e",
+    "ResGNN-UNet": "#2ca02c",
 }
 
 
@@ -51,7 +52,7 @@ def plot_fnr_sweep(eval_dir: Path, results: dict, output_dir: Path, dpi: int) ->
     """FNR vs threshold with CRC and three-way annotations."""
     fig, ax = plt.subplots(figsize=(7, 4))
 
-    for model_name in ("LightGBM", "U-Net"):
+    for model_name in ("LightGBM", "U-Net", "ResGNN-UNet"):
         sweep_path = eval_dir / f"{model_name}_sweep.npz"
         if not sweep_path.exists():
             continue
@@ -63,7 +64,7 @@ def plot_fnr_sweep(eval_dir: Path, results: dict, output_dir: Path, dpi: int) ->
     ax.axhline(0.05, color="red", linestyle="--", linewidth=1, label=r"$\alpha = 0.05$")
 
     # CRC threshold annotations
-    for model_name, marker in [("LightGBM", "s"), ("U-Net", "o")]:
+    for model_name, marker in [("LightGBM", "s"), ("U-Net", "o"), ("ResGNN-UNet", "D")]:
         key = f"{model_name}_crc"
         if key in results:
             lam = results[key].get("lambda_hat", results[key].get("threshold"))
@@ -107,7 +108,16 @@ def plot_safety_efficiency(results: dict, output_dir: Path, dpi: int) -> None:
         ("U-Net_standard", "U-Net\n(p≥0.5)"),
         ("U-Net_crc", "U-Net\n+ CRC"),
         ("U-Net_threeway", "U-Net\n+ 3-way"),
+        ("ResGNN-UNet_standard", "ResGNN\n(p≥0.5)"),
+        ("ResGNN-UNet_crc", "ResGNN\n+ CRC"),
+        ("ResGNN-UNet_threeway", "ResGNN\n+ 3-way"),
     ]
+
+    key_to_model = {
+        "LightGBM": "LightGBM",
+        "U-Net": "U-Net",
+        "ResGNN-UNet": "ResGNN-UNet",
+    }
 
     for key, label in order:
         if key not in results:
@@ -115,7 +125,7 @@ def plot_safety_efficiency(results: dict, output_dir: Path, dpi: int) -> None:
         methods.append(label)
         coverages.append(results[key]["coverage"])
         set_sizes.append(results[key]["set_size"])
-        model = "LightGBM" if "LightGBM" in key else "U-Net"
+        model = next(m for m in key_to_model if key.startswith(m))
         colors.append(COLORS[model])
 
     x = np.arange(len(methods))
