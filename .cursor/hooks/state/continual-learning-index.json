@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "transcripts": {
+    "/Users/artisan/.cursor/projects/Users-artisan-coding-fire/agent-transcripts/e66c8d88-55fd-4b48-b06a-7a01687f9300/e66c8d88-55fd-4b48-b06a-7a01687f9300.jsonl": {
+      "mtimeMs": 1774002331400,
+      "lastProcessedAt": "2026-03-20T10:26:20.000Z"
+    },
+    "/Users/artisan/.cursor/projects/Users-artisan-coding-fire/agent-transcripts/f68d3c44-edaa-4d45-a694-79449af9d3a9/f68d3c44-edaa-4d45-a694-79449af9d3a9.jsonl": {
+      "mtimeMs": 1773781128222,
+      "lastProcessedAt": "2026-03-20T10:26:20.000Z"
+    },
+    "/Users/artisan/.cursor/projects/Users-artisan-coding-fire/agent-transcripts/f68d3c44-edaa-4d45-a694-79449af9d3a9/subagents/8850e49c-1a73-452c-bfa4-f383808c979b.jsonl": {
+      "mtimeMs": 1773781128223,
+      "lastProcessedAt": "2026-03-20T10:26:20.000Z"
+    }
+  }
+}

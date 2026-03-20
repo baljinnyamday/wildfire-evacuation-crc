@@ -40,10 +40,10 @@ A Comparative Study of Tabular, Spatial, and Graph-Based Models}
 %% ============================================================
 
 \begin{abstract}
-Every wildfire prediction model deployed today shares a dangerous property: none of them guarantee how many fires they will miss.
+Every wildfire prediction model deployed today shares a dangerous property: none of these methods provides formal guarantees on how much fire spread is missed.
 Despite extensive work on wildfire spread prediction using deep learning, no prior study has applied distribution-free safety guarantees to this domain, leaving evacuation planners reliant on probability thresholds with no formal assurance.
 We address this gap by presenting, to our knowledge, the first application of conformal risk control (CRC) \citep{angelopoulos2022conformal} to wildfire spread prediction, providing finite-sample guarantees on false negative rate ($\mathrm{FNR} \le 0.05$).
-We expose a stark failure: across three model families of increasing complexity (tabular: LightGBM, AUROC 0.854; convolutional: Tiny U-Net, AUROC 0.969; and graph-based: Hybrid ResGNN-UNet, AUROC 0.964), standard thresholds capture only 7--72\% of true fire pixels.
+We expose a stark failure: across three model families of increasing complexity (tabular: LightGBM, AUROC 0.854; convolutional: Tiny U-Net, AUROC 0.969; and graph-based: Hybrid ResGNN-UNet, AUROC 0.964), standard thresholds capture only 7--72\% of true fire spread.
 CRC eliminates this failure uniformly.
 Our central finding is that \emph{model architecture determines evacuation efficiency, while CRC determines safety}: both spatial models with CRC achieve ${\sim}95\%$ fire coverage while flagging only ${\sim}15\%$ of pixels, making them 4.2$\times$ more efficient than LightGBM, while the graph model's additional complexity over a simple U-Net yields no meaningful efficiency gain.
 We further propose a three-way CRC extension producing SAFE/MONITOR/EVACUATE zones for operational triage, and characterize a fundamental limitation of prevalence-weighted bounds under extreme class imbalance (${\sim}5\%$ fire prevalence).
